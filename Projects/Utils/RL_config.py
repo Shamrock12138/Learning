@@ -3,16 +3,33 @@
 #                            shamrock
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import numpy as np
 
-class ENV_INFO(BaseModel):
+class ENV_INFO:
   '''
-    配置环境信息
+    配置环境信息，提供向外接口
   '''
-  states_num: int = 10
-  actions_num: int = 3
-  end_states: List[int] = []
+  def __init__(self):
+    self._state = None    # 当前状态
+    self._done = None     # 是否终止
+    self._info = {}       # 附加信息
+    self._states_num = None   # 状态数
+    self._actions_num = None  # 动作数
+  
+  def reset(self, seed, options):
+    '''
+      重置环境到初始状态
+      返回 (initial_state, info)
+    '''
+    pass
+
+  def step(self, action) -> Tuple[int, float, bool, dict]:
+    '''
+      执行一步动作
+      返回 (next_state, reward, info)
+    '''
+    pass
 
 class MDP(BaseModel):
   '''
