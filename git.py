@@ -24,16 +24,6 @@ commit_message = 'Shamrock_PC'
 
 #----------------- 工具函数 ----------------
 
-# def find_git_root(start_path=script_dir):
-#   path = os.path.abspath(start_path)
-#   while path != os.path.dirname(path):  # 防止无限循环（到根目录为止）
-#     if os.path.exists(os.path.join(path, ".git")):
-#       return path
-#     path = os.path.dirname(path)
-#   raise RuntimeError(".git directory not found. Are you in a Git repo?")
-
-# script_dir = os.path.dirname(os.path.abspath(__file__))
-
 REPO_ROOT = Path.cwd()
 
 def run_git_cmd(args, cwd=None, allow_fail=False):
@@ -112,9 +102,9 @@ def git_action_merge(src_branch, target_branch, cwd=None):
   branches, _ = run_git_cmd(["branch", "--list", "--no-color"], cwd=cwd)
   local_branches = [b.strip('* \n') for b in branches.splitlines()]
   if src_branch not in local_branches:
-    raise ValueError(f"源分支 '{src_branch}' 不存在！可用分支：{local_branches}")
+    raise ValueError(f"\033[31m 源分支 '{src_branch}' 不存在！可用分支：{local_branches}\033[0m")
   if target_branch not in local_branches:
-    raise ValueError(f"目标分支 '{target_branch}' 不存在！")
+    raise ValueError(f"\033[31m 目标分支 '{target_branch}' 不存在！\033[0m")
   
   # 2. 确保工作区干净
   ensure_clean_working_tree(cwd)
@@ -128,7 +118,7 @@ def git_action_merge(src_branch, target_branch, cwd=None):
   run_git_cmd(["pull", "origin", target_branch], cwd=cwd)
 
   # 5. 执行合并
-  print(f"✅ 执行合并: git merge {src_branch}")
+  print(f"执行合并: git merge {src_branch}")
   stdout, stderr = run_git_cmd(
     ["merge", src_branch, "--no-edit"],  # --no-edit 避免打开编辑器
     cwd=cwd,
@@ -182,7 +172,7 @@ def main():
   )
   parser.add_argument(
     "--message", "-m",
-    default="Shamrock_PC",
+    default=commit_message,
     help="提交信息，默认: %(default)s"
   )
   parser.add_argument(
@@ -196,10 +186,8 @@ def main():
 
   repo_root = args.repo.resolve()
   if not (repo_root / ".git").exists():
-    print(f"❌ 错误: '{repo_root}' 不是 Git 仓库")
+    print(f"\033[31m错误: '{repo_root}' 不是 Git 仓库\033[0m")
     sys.exit(1)
-
-  print(f"📁 仓库路径: {repo_root}")
 
   try:
     if args.action == "submit":
