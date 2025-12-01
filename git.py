@@ -147,7 +147,7 @@ def git_action_merge(src_branch, target_branch, cwd=None):
       print(f"\033[36m → Switching back to original branch: '{original_branch}' \033[0m")
       try:
         run_git_cmd(["checkout", original_branch], cwd=cwd)
-        print(f"\033[32m ✔ Back on '{original_branch}' \033[0m")
+        print(f"\033[32m Back on '{original_branch}' ✔ \033[0m")
       except Exception as e:
         print(f"\033[33m ⚠ Warning: Failed to switch back to '{original_branch}': {e}\033[0m")
 
