@@ -254,10 +254,10 @@ def main():
       if not args.src:
         parser.error("--src 是 --action merge 所必需的")
       git_merge(args.src, args.target, cwd=repo_root)
-    elif args.action == "update":  # ✅ 新增 update 分支
+    elif args.action == "update":
       success = git_update(cwd=repo_root)
       if not success:
-        sys.exit(1)  # 更新失败退出
+        sys.exit(1)
   except Exception as e:
     print(f"\033[31m 操作失败: {e}\033[0m")
     sys.exit(1)
