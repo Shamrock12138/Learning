@@ -64,6 +64,9 @@ def get_current_branch(cwd=None):
 #----------------- 函数 ----------------
 
 def git_add_commit_push(files, commit_message=None, cwd=None):
+  '''
+    将修改上传到远程仓库
+  '''
   if cwd is None:
     cwd = REPO_ROOT
   if isinstance(files, str):
@@ -94,7 +97,10 @@ def git_add_commit_push(files, commit_message=None, cwd=None):
   run_git_cmd(["push", "origin", branch[0]], cwd=cwd)
   print("\033[32m Pushed successfully! √ \033[0m")
 
-def git_action_merge(src_branch, target_branch, cwd=None):
+def git_merge(src_branch, target_branch, cwd=None):
+  '''
+    将src_branch合并到target_branch
+  '''
   original_branch, _ = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
   print(f"\033[34m Current branch: '{original_branch}' \033[0m")
   print(f"\033[34m Preparing to merge '{src_branch}' into '{target_branch}' \033[0m")
@@ -151,22 +157,61 @@ def git_action_merge(src_branch, target_branch, cwd=None):
       except Exception as e:
         print(f"\033[33m ⚠ Warning: Failed to switch back to '{original_branch}': {e}\033[0m")
 
+def git_update(cwd=None):
+  '''
+    更新当前分支
+  '''
+  current_branch, err = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+  print(f"\033[34m Current branch: '{current_branch}' \033[0m")
+
+  ensure_clean_working_tree(cwd)
+
+  print("\033[34m Fetching remote updates... \033[0m")
+  run_git_cmd(["fetch", "origin"], cwd=cwd)
+
+  remote_ref = f"origin/{current_branch}"
+  print(f"\033[34m Rebasing onto {remote_ref}... \033[0m")
+  stdout, stderr = run_git_cmd(
+    ["rebase", remote_ref],
+    cwd=cwd,
+    allow_fail=True
+  )
+
+  if "CONFLICT" in stderr or "rebase in progress" in stderr:
+    print("\033[33m Rebase paused due to conflicts.\033[0m")
+    print("   Please resolve conflicts, then run:")
+    print("      git rebase --continue")
+    print("   Or abort with:")
+    print("      git rebase --abort")
+    return False
+  elif "up to date" in stdout or "up to date" in stderr:
+    print("\033[32m Already up to date. √ \033[0m")
+    return True
+  elif "Fast-forwarded" in stdout or "Successfully rebased" in stdout:
+    print(f"\033[32m Successfully updated √ '{current_branch}'!\033[0m")
+    return True
+  else:
+    print(f"\033[31m Update failed:\033[0m {stderr or stdout}")
+    return False
+
 def main():
   parser = argparse.ArgumentParser(
-    description="Git 自动化工具：提交文件 或 合并分支",
+    description="Git 自动化工具：提交文件、合并分支 或 更新当前分支",
     epilog="示例:\n"
             "  # 提交默认文件\n"
             "  python git_tool.py --action submit\n\n"
             "  # 合并 b1 → main\n"
-            "  python git_tool.py --action merge --src b1 --target main",
+            "  python git_tool.py --action merge --src b1 --target main\n\n"
+            "  # 更新当前分支（fetch + rebase）\n"
+            "  python git_tool.py --action update",
     formatter_class=argparse.RawDescriptionHelpFormatter
   )
 
   parser.add_argument(
     "--action", "-a",
-    choices=["submit", "merge"],
+    choices=["submit", "merge", "update"],
     required=True,
-    help="操作类型：submit（提交文件）或 merge（合并分支）"
+    help="操作类型：submit（提交文件）、merge（合并分支）或 update（更新当前分支）"
   )
   parser.add_argument(
     "--src", "-s",
@@ -199,7 +244,7 @@ def main():
 
   repo_root = args.repo.resolve()
   if not (repo_root / ".git").exists():
-    print(f"\033[31m错误: '{repo_root}' 不是 Git 仓库\033[0m")
+    print(f"\033[31m❌ 错误: '{repo_root}' 不是 Git 仓库\033[0m")
     sys.exit(1)
 
   try:
@@ -208,7 +253,11 @@ def main():
     elif args.action == "merge":
       if not args.src:
         parser.error("--src 是 --action merge 所必需的")
-      git_action_merge(args.src, args.target, cwd=repo_root)
+      git_merge(args.src, args.target, cwd=repo_root)
+    elif args.action == "update":  # ✅ 新增 update 分支
+      success = git_update(cwd=repo_root)
+      if not success:
+        sys.exit(1)  # 更新失败退出
   except Exception as e:
     print(f"\033[31m 操作失败: {e}\033[0m")
     sys.exit(1)
