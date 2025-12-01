@@ -91,7 +91,6 @@ def git_add_commit_push(files, commit_message=None, cwd=None):
   # 4. git push
   branch = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
   print(f"Pushing to origin/{branch[0]}...")
-  # print(branch)
   run_git_cmd(["push", "origin", branch[0]], cwd=cwd)
   print("\033[32mPushed successfully! √ \033[0m")
 
