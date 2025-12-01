@@ -6,14 +6,16 @@ import numpy as np
 #---------------------- 环境 -------------------------
 #                      2025/11/30
 
-from RL_config import ENV_INFO
+from .RL_config import ENV_INFO, MDP
 
-class CliffWalking(ENV_INFO):
+class Env_CliffWalking(ENV_INFO):
   '''
-    悬崖漫步
+    悬崖漫步，使用MDP的方式
   '''
   def __init__(self, height=4, width=12):
     super().__init__()
+    self.matrix = MDP(states_num=height*width, actions_num=4)
+    
     self.height = height
     self.width = width
     self._states_num = height*width
@@ -23,7 +25,68 @@ class CliffWalking(ENV_INFO):
     self._goal_pos = (height-1, width-1)
     self._start_pos = (height-1, 0)
 
+    self._cliff_sta = []
+    self._start_sta = self._pos_to_state(self._start_pos)
+    self._goal_sta = self._pos_to_state(self._goal_pos)
+    self._cliff_sta = [
+      (height - 1) * width + c for c in range(1, width - 1)
+    ]
+    self.build_matrix()
+
     self._pos = None
+
+  def build_matrix(self):
+    self.matrix.P = [
+      [[0.0 for _ in range(self._states_num)] for _ in range(self._actions_num)]
+      for _ in range(self._states_num)
+    ]
+    self.matrix.R_E = [.0]*self._states_num
+    self.matrix.done = [False]*self._states_num
+
+    nS, nA = self._states_num, self._actions_num
+    width, height = self.width, self.height
+
+    # 预计算每个 state 的「上下左右」邻居（纯 state 编号）
+    # 若越界或撞墙，则 stay in place
+    def get_next_state(s: int, action: int) -> int:
+      r, c = divmod(s, width)  # 仅在此内部转换，不暴露给外部
+      if action == 0:   # ↑
+        nr, nc = r - 1, c
+      elif action == 1: # →
+        nr, nc = r, c + 1
+      elif action == 2: # ↓
+        nr, nc = r + 1, c
+      elif action == 3: # ←
+        nr, nc = r, c - 1
+      else:
+        raise ValueError("Invalid action")
+      # 撞墙检查：stay
+      if not (0 <= nr < height and 0 <= nc < width):
+        return s
+      return nr * width + nc
+
+    # Step 1: 初始化 done 和 R_E
+    for s in range(nS):
+      if s in self._cliff_sta:
+        self.matrix.done[s] = True
+        self.matrix.R_E[s] = -100.0
+      elif s == self._goal_sta:
+        self.matrix.done[s] = True
+        self.matrix.R_E[s] = 0.0   # Sutton & Barto 原版用 0（与每步 -1 一致）
+      else:
+        self.matrix.R_E[s] = -1.0
+
+    # Step 2: 填充 P[s][a][s_next]
+    for s in range(nS):
+      for a in range(nA):
+        if self.matrix.done[s]:
+          # 终止态：stay
+          self.matrix.P[s][a][s] = 1.0
+        else:
+          s_next = get_next_state(s, a)
+          self.matrix.P[s][a][s_next] = 1.0
+
+    self.matrix.test()
     
   def _pos_to_state(self, pos: tuple) -> int:
     """将 (row, col) 转为 0 ~ states_num-1 的整数状态编号"""
@@ -64,15 +127,11 @@ class CliffWalking(ENV_INFO):
       raise ValueError(f"Invalid action: {action}")
     next_pos = (r, c)
     next_state = self._pos_to_state(next_pos)
-    if r == self.height - 1 and c in self._cliff_cols:
+    if next_state in self._cliff_sta:
       reward = -100
       self._done = True
-    # elif not self.is_valid_pos(next_pos):
-    #   reward = -10
-    #   next_pos = self._pos
-    #   self._done = True
-    elif next_pos == self._goal_pos:
-      reward = 10  # Sutton & Barto 原版用 -1（与每步一致），也有用 +0 或 +10 的变体
+    elif next_state == self._goal_sta:
+      reward = 0  # 与 R_E 一致
       self._done = True
     else:
       reward = -1
@@ -188,17 +247,18 @@ def RTools_MonteCorlo(episodes, gamma, first_visit=True):
   return V
 
 if __name__ == '__main__':
-  env = CliffWalking()
-  state, info = env.reset(seed=42)
-  print("Initial state:", state, "info:", info)
+  env = Env_CliffWalking()
+  # print(env.matrix.P)
+  # state, info = env.reset(seed=42)
+  # print("Initial state:", state, "info:", info)
 
-  for step in range(15):
-    action = 0  # 一直向右走（会掉崖）
-    next_state, reward, info = env.step(action)
-    print(f"Step {step}: action={action} → state={next_state}, reward={reward}, done={info['done']}")
-    if info["done"]:
-      print("Episode ended.")
-      break
+  # for step in range(15):
+  #   action = 0  # 一直向右走（会掉崖）
+  #   next_state, reward, info = env.step(action)
+  #   print(f"Step {step}: action={action} → state={next_state}, reward={reward}, done={info['done']}")
+  #   if info["done"]:
+  #     print("Episode ended.")
+  #     break
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
