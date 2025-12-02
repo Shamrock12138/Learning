@@ -8,7 +8,10 @@ import numpy as np
 
 class ENV_INFO:
   '''
-    配置环境信息，提供向外接口
+    为各类 RL 环境提供统一的外部调用接口。
+
+    该类本身不实现具体算法逻辑，而是定义标准接口协议：
+      - 子类必须实现 `reset` `step` 方法 以及 提供相应信息（`self._state` 等）；
   '''
   def __init__(self):
     self._state = None    # 当前状态
@@ -64,8 +67,18 @@ class MDP:
       raise ValueError("Done matrix done must be provided explicitly.")
 
 class RL_Model:
+  '''
+    为各类 RL 算法提供统一的外部调用接口。
+
+    该类本身不实现具体算法逻辑，而是定义标准接口协议：
+      - 子类必须实现 `run` 方法，作为模型的核心执行入口；
+      - 通过重载 `__call__`，使实例可直接作为函数调用，提升 API 友好性。
+  '''
   def __call__(self, *input, **kwds):
     return self.run(*input, **kwds)
+  
+  def run(self, *input, **kwds):
+    raise NotImplementedError('Subclasses must implement the `run` method.')
 
 if __name__ == '__main__':
   pass

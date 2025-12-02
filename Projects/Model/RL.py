@@ -69,10 +69,18 @@ class DP_PolicyIteration(RL_Model):
       else:
         cnt = 0
 
+class DP_ValueIteration(RL_Model):
+  def __init__(self, env:ENV_INFO, theta, gamma):
+    self.env = env
+    self.mdp = env.matrix
+    self.v = [0]*env._states_num
+    self.pi = [[0]*env._actions_num]*env._states_num
+    self.theta = theta
+    self.gamma = gamma
 
+  def value_iteration(self):
 
-
-
+    
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
