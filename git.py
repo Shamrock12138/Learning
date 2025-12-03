@@ -71,9 +71,13 @@ def git_add_commit_push(files, commit_message=None, cwd=None):
     cwd = REPO_ROOT
   if isinstance(files, str):
     files = [files]
-  
+  branch = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+
   print(f"Repo root: {cwd}")
   print(f"Adding files: {files}")
+  print(f"Pushing to origin/{branch[0]}")
+
+  input("\nPress Enter to confirm submission (or Ctrl+C to abort)...")
   
   # 1. git add
   run_git_cmd(["add"] + files, cwd=cwd)
@@ -92,8 +96,6 @@ def git_add_commit_push(files, commit_message=None, cwd=None):
   print("\033[34m Committed. \033[0m")
 
   # 4. git push
-  branch = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
-  print(f"\033[34m Pushing to origin/{branch[0]}... \033[0m")
   run_git_cmd(["push", "origin", branch[0]], cwd=cwd)
   print("\033[32m Pushed successfully! √ \033[0m")
 
