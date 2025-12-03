@@ -35,6 +35,12 @@ class ENV_INFO:
     '''
     pass
 
+  def render(self) -> None:
+    '''
+      渲染当前环境（可选实现
+    '''
+    pass
+
 class MDP:
   '''
     配置 马尔可夫 过程

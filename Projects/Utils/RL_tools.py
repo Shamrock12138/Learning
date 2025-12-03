@@ -144,6 +144,9 @@ class Env_CliffWalking(ENV_INFO):
     self._state = next_state
     return next_state, reward, self._info.copy()
 
+  def render(self):
+    pass
+
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
 

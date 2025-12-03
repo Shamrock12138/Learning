@@ -79,7 +79,50 @@ class DP_ValueIteration(RL_Model):
     self.gamma = gamma
 
   def value_iteration(self):
+    cnt = 1
+    while 1:
+      max_diff = 0
+      new_v = [0]*self.env._states_num
+      for s in range(self.env._states_num):
+        Q = []
+        for a in range(self.env._actions_num):
+          q = 0
+          for next_s in range(self.env._states_num):
+            p = self.mdp.P[s][a][next_s]
+            r = self.mdp.R_E[next_s]
+            done = self.mdp.done[next_s]
+            q += p*(r+self.gamma*self.v[next_s]*(1-done))
+          Q.append(q)
+        new_v[s] = max(Q)
+        max_diff = max(max_diff, abs(new_v[s]-self.v[s]))
+      self.v = new_v
+      if max_diff < self.theta:
+        break
+      cnt += 1
+    print(f'{cnt}轮后完成 value_iteration ')
+    # self.get_policy()
 
+  def get_policy(self):
+    for s in range(self.env._states_num):
+      Q = []
+      for a in range(self.env._actions_num):
+        q = 0
+        for next_s in range(self.env._states_num):
+          p = self.mdp.P[s][a][next_s]
+          r = self.mdp.R_E[next_s]
+          done = self.mdp.done[next_s]
+          q += p*(r+self.gamma*self.v[next_s]*(1-done))
+        Q.append(q)
+      maxQ = max(Q)
+      cntQ = Q.count(maxQ)
+      self.pi[s] = [1/cntQ if q == maxQ else 0 for q in Q]
+
+  def run(self, episodes=5):
+    while episodes:
+      self.value_iteration()
+      old_pi = copy.deepcopy(self.pi)
+      new_pi = self.get_policy()
+      episodes -= 1
     
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
