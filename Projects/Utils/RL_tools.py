@@ -7,6 +7,7 @@ import numpy as np
 #                      2025/11/30
 
 from .RL_config import ENV_INFO, MDP
+import gym
 
 class Env_CliffWalking(ENV_INFO):
   '''
@@ -146,6 +147,14 @@ class Env_CliffWalking(ENV_INFO):
 
   def render(self):
     pass
+
+class Env_FozenLake(ENV_INFO):
+  '''
+    冰湖环境，使用MDP的方式
+  '''
+  def __init__(self):
+    super().__init__()
+    
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
