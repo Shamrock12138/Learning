@@ -73,9 +73,9 @@ def git_add_commit_push(files, commit_message=None, cwd=None):
     files = [files]
   branch = run_git_cmd(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
 
-  print(f"Repo root: {cwd}")
-  print(f"Adding files: {files}")
-  print(f"Pushing to origin/{branch[0]}")
+  print(f"\033[34mRepo root: {cwd}\033[0m")
+  print(f"\033[34mAdding files: {files}\033[0m")
+  print(f"\033[34mCurrent branch: origin/{branch[0]}\033[0m")
 
   input("\nPress Enter to confirm submission (or Ctrl+C to abort)...")
   
