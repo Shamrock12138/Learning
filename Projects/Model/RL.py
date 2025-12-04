@@ -2,7 +2,7 @@
 #                           2025/10/25
 #                            shamrock
 
-from ..Utils.RL_config import ENV_INFO, MDP, RL_Model
+from ..Utils.RL_config import ENV_INFO, RL_Model
 import copy
 
 #---------------------- Dyanemic Programming -------------------------
@@ -56,18 +56,12 @@ class DP_PolicyIteration(RL_Model):
       self.pi[s] = [1/cntQ if q == maxQ else 0 for q in Q]
     return self.pi
   
-  def run(self):
-    cnt = 0
-    while 1:
+  def run(self, episodes=5):
+    while episodes:
       self.policy_evaluation()
       old_pi = copy.deepcopy(self.pi)
       new_pi = self.policy_improvement()
-      if old_pi == new_pi:
-        cnt += 1
-        if cnt > 5:
-          break
-      else:
-        cnt = 0
+      episodes -= 1
 
 class DP_ValueIteration(RL_Model):
   def __init__(self, env:ENV_INFO, theta, gamma):
@@ -124,6 +118,18 @@ class DP_ValueIteration(RL_Model):
       new_pi = self.get_policy()
       episodes -= 1
     
+class SARSA(RL_Model):
+  def __init__(self, env:ENV_INFO, alpha, gamma):
+    super().__init__()
+    self.env = env
+    self.matrix = env.matrix
+    self.alpha = alpha
+    self.gamma = gamma
+    
+
+  def run():
+    pass
+
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  

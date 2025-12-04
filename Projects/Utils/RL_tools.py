@@ -5,6 +5,8 @@ import numpy as np
 
 #---------------------- 环境 -------------------------
 #                      2025/11/30
+# Model Free:
+# Model Base: Env_CliffWalking Env_FrozenLake
 
 from .RL_config import ENV_INFO, MDP
 import gym
@@ -32,11 +34,11 @@ class Env_CliffWalking(ENV_INFO):
     self._cliff_sta = [
       (height - 1) * width + c for c in range(1, width - 1)
     ]
-    self.build_matrix()
+    self._build_matrix()
 
     self._pos = None
 
-  def build_matrix(self):
+  def _build_matrix(self):
     self.matrix.P = [
       [[0.0 for _ in range(self._states_num)] for _ in range(self._actions_num)]
       for _ in range(self._states_num)
@@ -150,22 +152,24 @@ class Env_CliffWalking(ENV_INFO):
 
 class Env_FrozenLake(ENV_INFO):
   '''
-    冰湖环境，MDP
+    冰湖环境，MDP，尺寸 4x4
+      s 1 2 3 
+      4 x 6 x 
+      8 9 10 x 
+      x 13 14 o
   '''
   def __init__(self):
     super().__init__()
     # 封装官方环境
     self._env = gym.make('FrozenLake-v1', is_slippery=True, render_mode=None)
     self._states_num = 16
-    self._actions_num = 4
+    self._actions_num = 4   # left down right up
 
-    # 预构建 MDP 矩阵（与官方 env 逻辑一致）
     self.matrix = MDP(states_num=16, actions_num=4)
     self._build_matrix()
 
   def _build_matrix(self):
     nS, nA = 16, 4
-    # 初始化
     self.matrix.P = [[[0.0]*nS for _ in range(nA)] for _ in range(nS)]
     self.matrix.R_E = [0.0]*nS
     self.matrix.done = [False]*nS
@@ -176,10 +180,10 @@ class Env_FrozenLake(ENV_INFO):
 
     for s in range(nS):
       if s in hole_states:
-        self.matrix.R_E[s] = -1.0
+        self.matrix.R_E[s] = -10.0
         self.matrix.done[s] = True
       elif s == goal_state:
-        self.matrix.R_E[s] = 1.0
+        self.matrix.R_E[s] = 5.0
         self.matrix.done[s] = True
 
     # gym 的 env.P[s][a] = [(prob, next_state, reward, done), ...]
@@ -210,6 +214,16 @@ class Env_FrozenLake(ENV_INFO):
 
   def render(self):
     pass
+
+#---------------------- 采取动作的策略 -------------------------
+#                         2025/12/4
+#   
+
+def RTools_epsilon(epsilon):
+  '''
+    采用 ε-greedy 的方式
+  '''
+
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
