@@ -148,13 +148,65 @@ class Env_CliffWalking(ENV_INFO):
   def render(self):
     pass
 
-class Env_FozenLake(ENV_INFO):
-  '''
-    冰湖环境，使用MDP的方式
-  '''
-  def __init__(self):
-    super().__init__()
-    
+class Env_FrozenLake(ENV_INFO):
+    def __init__(self):
+      super().__init__()
+      # 封装官方环境
+      self._env = gym.make('FrozenLake-v1', is_slippery=True, render_mode=None)
+      self._states_num = 16
+      self._actions_num = 4
+
+      # 预构建 MDP 矩阵（与官方 env 逻辑一致）
+      self.matrix = MDP(states_num=16, actions_num=4)
+      self._build_matrix()
+
+    def _build_matrix(self):
+      nS, nA = 16, 4
+      # 初始化
+      self.matrix.P = [[[0.0]*nS for _ in range(nA)] for _ in range(nS)]
+      self.matrix.R_E = [0.0]*nS
+      self.matrix.done = [False]*nS
+
+      # Hole states: 5,7,11,12; Goal: 15
+      hole_states = [5, 7, 11, 12]
+      goal_state = 15
+
+      for s in range(nS):
+        if s in hole_states:
+          self.matrix.R_E[s] = -1.0
+          self.matrix.done[s] = True
+        elif s == goal_state:
+          self.matrix.R_E[s] = 1.0
+          self.matrix.done[s] = True
+
+      # gym 的 env.P[s][a] = [(prob, next_state, reward, done), ...]
+      for s in range(nS):
+        for a in range(nA):
+          if self.matrix.done[s]:
+            self.matrix.P[s][a][s] = 1.0
+          else:
+            for prob, ns, r, _ in self._env.unwrapped.P[s][a]:
+              self.matrix.P[s][a][ns] += prob
+              # 注意：R_E 是进入 ns 的期望奖励，而 gym 返回的是 (s,a,ns) 的即时奖励
+              # 因 FrozenLake 奖励仅依赖 ns，故 R_E[ns] 已设定，此处无需更新 R_E
+      self.matrix.test()
+
+    def reset(self, seed=None, options=None):
+      obs, info = self._env.reset(seed=seed)
+      self._state = int(obs)
+      self._done = False
+      self._info = {'done': False}
+      return self._state, self._info.copy()
+
+    def step(self, action):
+      obs, reward, terminated, truncated, info = self._env.step(action)
+      self._state = int(obs)
+      self._done = terminated or truncated
+      self._info = {'done': self._done, 'next_state': self._state}
+      return self._state, float(reward), self._info.copy()
+
+    def render(self):
+      pass
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
