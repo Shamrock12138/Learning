@@ -10,7 +10,13 @@ import numpy as np
 #---------------------- Dyanemic Programming -------------------------
 #                           2025/12/1
 
+# Model Free: SARSA
+# Model Base: DP
+
 class DP_PolicyIteration(RL_Model):
+  '''
+    DP：需要环境数据（MDP）
+  '''
   def __init__(self, env:ENV_INFO, theta, gamma):
     self.env = env
     self.mdp = env.matrix
@@ -122,10 +128,12 @@ class DP_ValueIteration(RL_Model):
       episodes -= 1
     
 class SARSA(RL_Model):
+  '''
+    SARSA：不需要环境数据（MDP）
+  '''
   def __init__(self, env:ENV_INFO, epsilon, alpha, gamma):
     super().__init__()
     self.env = env
-    self.matrix = env.matrix
     self.alpha = alpha
     self.gamma = gamma
     self.epsilon = epsilon
@@ -160,11 +168,13 @@ class SARSA(RL_Model):
         state, action = n_state, n_action
     self.get_policy()
 
-class nstep_SARSA(RL_Model):
+class SARSA_nstep(RL_Model):
+  '''
+    nSteps SARSA
+  '''
   def __init__(self, env:ENV_INFO, n_steps, epsilon, alpha, gamma):
     super().__init__()
     self.env = env
-    self.matrix = env.matrix
     self.alpha = alpha
     self.gamma = gamma
     self.epsilon = epsilon

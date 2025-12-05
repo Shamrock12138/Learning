@@ -5,8 +5,6 @@ import numpy as np
 
 #---------------------- 环境 -------------------------
 #                      2025/11/30
-# Model Free:
-# Model Base: Env_CliffWalking Env_FrozenLake
 
 from .RL_config import ENV_INFO, MDP
 import gymnasium as gym
