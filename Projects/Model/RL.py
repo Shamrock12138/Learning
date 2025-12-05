@@ -163,6 +163,8 @@ class SARSA(RL_Model):
       done = False
       while not done:
         n_state, reward, done, _ = self.env.step(action)
+        # if hasattr(self.env, 'render'):
+        #   self.env.render()
         n_action = self.take_action(n_state)
         self.update(state, action, reward, n_state, n_action)
         state, action = n_state, n_action
