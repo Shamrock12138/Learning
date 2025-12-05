@@ -43,6 +43,13 @@ class Env_CliffWalking(ENV_INFO):
     self._cliff_sta = [
       (height - 1) * width + c for c in range(1, width - 1)
     ]
+    # self._cliff_sta.append((height-2)*width+width/2)
+    # self._cliff_sta.append((height-3)*width+width/2)
+    # self._cliff_sta.append((height-3)*width+width-1)
+    # self._cliff_sta.append((height-3)*width+width-2)
+    self.r_cliff = -100
+    self.r_path = 0
+    self.r_goal = 10
     self._build_matrix()
 
     self._pos = None
@@ -81,12 +88,12 @@ class Env_CliffWalking(ENV_INFO):
     for s in range(nS):
       if s in self._cliff_sta:
         self.matrix.done[s] = True
-        self.matrix.R_E[s] = -100.0
+        self.matrix.R_E[s] = self.r_cliff
       elif s == self._goal_sta:
         self.matrix.done[s] = True
-        self.matrix.R_E[s] = 0.0   # Sutton & Barto 原版用 0（与每步 -1 一致）
+        self.matrix.R_E[s] = self.r_goal   # Sutton & Barto 原版用 0（与每步 -1 一致）
       else:
-        self.matrix.R_E[s] = -1.0
+        self.matrix.R_E[s] = self.r_path
 
     # Step 2: 填充 P[s][a][s_next]
     for s in range(nS):
@@ -138,8 +145,39 @@ class Env_CliffWalking(ENV_INFO):
     self._state = next_state
     return next_state, reward, self._done, self._info.copy()
 
-  def render(self):
-    pass
+  def render(self, pi):
+    arrows = ['↑', '→', '↓', '←']
+    print("=" * (self.width * 2 + 1))
+    
+    for r in range(self.height):
+      row_str = "|"
+      for c in range(self.width):
+        s = r * self.width + c
+        ch = '.'
+        
+        # 标记特殊格子
+        if (r, c) == self._start_pos:
+          ch = '\033[34mS\033[0m'
+        elif (r, c) == self._goal_pos:
+          ch = '\033[32mG\033[0m'
+        elif s in self._cliff_sta:
+          ch = '\033[31mX\033[0m'
+        else:
+          # 安全区：显示策略主导动作
+          if not self.matrix.done[s]:
+            probs = pi[s]
+            if np.allclose(probs, np.ones(4)/4):
+              ch = '?'  # 随机策略
+            else:
+              best_a = int(np.argmax(probs))
+              ch = arrows[best_a]
+          else:
+            ch = 'X'  # 其他终止态（不应出现）
+        row_str += f"{ch} "
+      row_str = row_str.rstrip() + "|"
+      print(row_str)
+    
+    print("=" * (self.width * 2 + 1))
 
 class Env_FrozenLake(ENV_INFO):
   '''
@@ -403,18 +441,6 @@ class Env_AimBall(ENV_INFO):
               ns = encode(nix, niy, itx, ity)
               self.matrix.P[s][a][ns] = 1.0
     self.matrix.test()
-
-# env = AimTrainerEnv(seed=42)
-# state, info = env.reset()
-# print("Initial state:", state)
-
-# for _ in range(50):
-#     action = np.random.randint(4)  # 随机策略
-#     next_state, reward, info = env.step(action)
-#     print(f"Action: {action}, Reward: {reward:.3f}, Hit: {info['hit']}")
-#     env.render()
-#     if info['done']:
-#         break
 
 #---------------------- 采取动作的策略 -------------------------
 #                         2025/12/4

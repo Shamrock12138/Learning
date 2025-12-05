@@ -4,13 +4,14 @@
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
 from ..Utils.RL_tools import RTools_epsilon
+from ..Utils.tools import utils_timer
 import copy
 import numpy as np
 
 #---------------------- Dyanemic Programming -------------------------
 #                           2025/12/1
 
-# Model Free: SARSA
+# Model Free: SARSA Q-Learning
 # Model Base: DP
 
 class DP_PolicyIteration(RL_Model):
@@ -65,6 +66,7 @@ class DP_PolicyIteration(RL_Model):
       self.pi[s] = [1/cntQ if q == maxQ else 0 for q in Q]
     return self.pi
   
+  @utils_timer
   def run(self, episodes=5):
     while episodes:
       self.policy_evaluation()
@@ -120,6 +122,7 @@ class DP_ValueIteration(RL_Model):
       cntQ = Q.count(maxQ)
       self.pi[s] = [1/cntQ if q == maxQ else 0 for q in Q]
 
+  @utils_timer
   def run(self, episodes=5):
     while episodes:
       self.value_iteration()
@@ -156,6 +159,7 @@ class SARSA(RL_Model):
         if self.Q[state, i] == maxQ:
           self.pi[state, i] = 1
 
+  @utils_timer
   def run(self, episodes=50):
     for episode in range(episodes):
       state, _ = self.env.reset()
@@ -220,6 +224,7 @@ class SARSA_nstep(RL_Model):
         if self.Q[state, i] == maxQ:
           self.pi[state, i] = 1
 
+  @utils_timer
   def run(self, episodes=50):
     for episode in range(episodes):
       state, _ = self.env.reset()
@@ -230,6 +235,76 @@ class SARSA_nstep(RL_Model):
         n_action = self.take_action(n_state)
         self.update(state, action, reward, n_state, n_action, done)
         state, action = n_state, n_action
+    self.get_policy()
+
+class Q_Learning(RL_Model):
+  def __init__(self, env:ENV_INFO, epsilon, alpha, gamma):
+    super().__init__()
+    self.env = env
+    self.alpha = alpha
+    self.gamma = gamma
+    self.epsilon = epsilon
+
+    self.Q = np.zeros((env._states_num, env._actions_num))
+    self.pi = np.zeros((env._states_num, env._actions_num))
+
+  def take_action(self, state):
+    argmax_action = np.argmax(self.Q[state])
+    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+  
+  def update(self, s0, a0, r, s1):
+    td_error = r+self.gamma*self.Q[s1].max()-self.Q[s0, a0]
+    self.Q[s0, a0] += self.alpha*td_error
+
+  def get_policy(self):
+    for state in range(self.env._states_num):
+      maxQ = np.max(self.Q[state])
+      for i in range(self.env._actions_num):
+        if self.Q[state, i] == maxQ:
+          self.pi[state, i] = 1
+    return self.pi
+
+  @utils_timer
+  def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
+    '''
+      params:
+        episodes - 
+          None时，提前停止，使用 diff_tol quit_cnt 参数
+          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
+        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
+        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
+    '''
+    if episodes is not None:
+      for episode in range(episodes):
+        state, _ = self.env.reset()
+        done = False
+        while not done:
+          action = self.take_action(state)
+          n_state, reward, done, _ = self.env.step(action)
+          self.update(state, action, reward, n_state)
+          state = n_state
+    else:
+      times, cnt = 0, 0
+      while True:
+        times += 1
+        last_Q = self.Q.copy()
+        state, _ = self.env.reset()
+        done = False
+        while not done:
+          action = self.take_action(state)
+          n_state, reward, done, _ = self.env.step(action)
+          self.update(state, action, reward, n_state)
+          state = n_state
+        current_Q = self.Q.copy()
+        Q_diff = np.abs(current_Q-last_Q).sum()
+        # print(f'Q Δ = {Q_diff:.6f}')
+        if Q_diff < diff_tol:
+          cnt += 1
+          if cnt > quit_cnt:
+            print(f'Finished after {times} times.')
+            break
+        else:
+          cnt = 0
     self.get_policy()
 
 #         ,--.                                                 ,--.     
