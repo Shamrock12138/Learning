@@ -3,7 +3,9 @@
 #                            shamrock
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
+from ..Utils.RL_tools import RTools_epsilon
 import copy
+import numpy as np
 
 #---------------------- Dyanemic Programming -------------------------
 #                           2025/12/1
@@ -119,16 +121,46 @@ class DP_ValueIteration(RL_Model):
       episodes -= 1
     
 class SARSA(RL_Model):
-  def __init__(self, env:ENV_INFO, alpha, gamma):
+  def __init__(self, env:ENV_INFO, epsilon, alpha, gamma):
     super().__init__()
     self.env = env
     self.matrix = env.matrix
     self.alpha = alpha
     self.gamma = gamma
-    
+    self.epsilon = epsilon
 
-  def run():
-    pass
+    self.Q = np.zeros((env._states_num, env._actions_num))
+    self.pi = np.zeros([env._states_num, env._actions_num])
+    # self.pi = [[0]*env._actions_num]*env._states_num
+
+  def take_action(self, state):
+    argmax_action = np.argmax(self.Q[state])
+    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+  
+  def update(self, s0, a0, r, s1, a1):
+    td_error = r+self.gamma*self.Q[s1, a1]-self.Q[s0, a0]
+    self.Q[s0, a0] += self.alpha*td_error
+
+  def get_policy(self):
+    for state in range(self.env._states_num):
+      maxQ = np.max(self.Q[state])
+      # a = [0 for _ in range(self.env._actions_num)]
+      for i in range(self.env._actions_num):
+        if self.Q[state, i] == maxQ:
+          self.pi[state, i] = 1
+
+  def run(self, episodes=50):
+    for episode in range(episodes):
+      state, _ = self.env.reset()
+      action = self.take_action(state)
+      done = False
+      while not done:
+        n_state, reward, done, _ = self.env.step(action)
+        n_action = self.take_action(n_state)
+        self.update(state, action, reward, n_state, n_action)
+        state, action = n_state, n_action
+    print(self.Q)
+    self.get_policy()
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

@@ -9,11 +9,21 @@ import numpy as np
 # Model Base: Env_CliffWalking Env_FrozenLake
 
 from .RL_config import ENV_INFO, MDP
-import gym
+import gymnasium as gym
+
+def _pos_to_state(width, pos: tuple) -> int:
+  """将 (row, col) 转为 0 ~ states_num-1 的整数状态编号"""
+  r, c = pos
+  return r * width + c
+
+def _state_to_pos(width, state: int) -> tuple:
+  """将状态编号转回 (row, col)"""
+  return divmod(state, width)
 
 class Env_CliffWalking(ENV_INFO):
   '''
     悬崖漫步，使用MDP的方式
+      action: up right down left
   '''
   def __init__(self, height=4, width=12):
     super().__init__()
@@ -29,8 +39,8 @@ class Env_CliffWalking(ENV_INFO):
     self._start_pos = (height-1, 0)
 
     self._cliff_sta = []
-    self._start_sta = self._pos_to_state(self._start_pos)
-    self._goal_sta = self._pos_to_state(self._goal_pos)
+    self._start_sta = _pos_to_state(width, self._start_pos)
+    self._goal_sta = _pos_to_state(width, self._goal_pos)
     self._cliff_sta = [
       (height - 1) * width + c for c in range(1, width - 1)
     ]
@@ -90,18 +100,6 @@ class Env_CliffWalking(ENV_INFO):
           self.matrix.P[s][a][s_next] = 1.0
 
     self.matrix.test()
-    
-  def _pos_to_state(self, pos: tuple) -> int:
-    """将 (row, col) 转为 0 ~ states_num-1 的整数状态编号"""
-    r, c = pos
-    return r * self.width + c
-
-  def _state_to_pos(self, state: int) -> tuple:
-    """将状态编号转回 (row, col)"""
-    return divmod(state, self.width)
-  
-  def is_valid_pos(self, pos: tuple) -> bool:
-    return 0<=pos[0]<self.height and 0<=pos[1]<self.width
   
   def reset(self, seed=None, options=None):
     if seed is not None:
@@ -109,7 +107,7 @@ class Env_CliffWalking(ENV_INFO):
       random.seed(seed)
     self._pos = self._start_pos
     self._done = False
-    initial_state = self._pos_to_state(self._pos)
+    initial_state = _pos_to_state(self.width, self._pos)
     self._state = initial_state
     self._info = {'done': False}
     return initial_state, self._info.copy()
@@ -129,7 +127,7 @@ class Env_CliffWalking(ENV_INFO):
     else:
       raise ValueError(f"Invalid action: {action}")
     next_pos = (r, c)
-    next_state = self._pos_to_state(next_pos)
+    next_state = _pos_to_state(self.width, next_pos)
     if next_state in self._cliff_sta:
       reward = -100
       self._done = True
@@ -145,7 +143,7 @@ class Env_CliffWalking(ENV_INFO):
       'next_state': next_state
     }
     self._state = next_state
-    return next_state, reward, self._info.copy()
+    return next_state, reward, self._done, self._info.copy()
 
   def render(self):
     pass
@@ -217,13 +215,20 @@ class Env_FrozenLake(ENV_INFO):
 
 #---------------------- 采取动作的策略 -------------------------
 #                         2025/12/4
-#   
 
-def RTools_epsilon(epsilon):
+def RTools_epsilon(epsilon, n_actions:int, argmax_action:int):
   '''
-    采用 ε-greedy 的方式
+    采用 ε-greedy 的方式，epsilon越大，越随机，反之，越容易选择argmax_action。
+      params:
+        epsilon: float - 
+        n_actions - 动作个数
+        argmax_action: int - 较优action
   '''
-
+  if np.random.random() < epsilon:
+    action = np.random.randint(n_actions)
+  else:
+    action = argmax_action
+  return action
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29

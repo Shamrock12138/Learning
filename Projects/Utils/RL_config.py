@@ -12,6 +12,7 @@ class ENV_INFO:
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
       - 子类必须实现 `reset` `step` 方法 以及 提供相应信息（`self._state` 等）；
+      - 提供 _states_num、_actions_num、matrix
   '''
   def __init__(self):
     self._state = None    # 当前状态
