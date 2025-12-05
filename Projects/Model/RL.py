@@ -159,7 +159,6 @@ class SARSA(RL_Model):
         n_action = self.take_action(n_state)
         self.update(state, action, reward, n_state, n_action)
         state, action = n_state, n_action
-    print(self.Q)
     self.get_policy()
 
 #         ,--.                                                 ,--.     
