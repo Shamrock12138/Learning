@@ -32,7 +32,7 @@ class ENV_INFO:
   def step(self, action) -> Tuple[int, float, bool, dict]:
     '''
       执行一步动作
-      返回 (next_state, reward, info)
+      返回 (next_state, reward, done, info)
     '''
     pass
 

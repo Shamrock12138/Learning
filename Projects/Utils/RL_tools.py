@@ -114,7 +114,7 @@ class Env_CliffWalking(ENV_INFO):
   
   def step(self, action:int):
     if self._done:
-      return self._state, 0.0, {'done': True, 'warning': 'env already done'}
+      return self._state, 0.0, True, {'done': True, 'warning': 'env already done'}
     r, c = self._pos
     if action == 0:   # 上
       r = max(0, r - 1)
@@ -128,14 +128,8 @@ class Env_CliffWalking(ENV_INFO):
       raise ValueError(f"Invalid action: {action}")
     next_pos = (r, c)
     next_state = _pos_to_state(self.width, next_pos)
-    if next_state in self._cliff_sta:
-      reward = -100
-      self._done = True
-    elif next_state == self._goal_sta:
-      reward = 0  # 与 R_E 一致
-      self._done = True
-    else:
-      reward = -1
+    self._done = self.matrix.done[next_state]
+    reward = self.matrix.R_E[next_state]
     self._pos = next_pos
     self._info = {
       'done': self._done,
@@ -197,18 +191,22 @@ class Env_FrozenLake(ENV_INFO):
     self.matrix.test()
 
   def reset(self, seed=None, options=None):
-    obs, info = self._env.reset(seed=seed)
-    self._state = int(obs)
+    self._state = 0
     self._done = False
     self._info = {'done': False}
     return self._state, self._info.copy()
 
   def step(self, action):
-    obs, reward, terminated, truncated, info = self._env.step(action)
-    self._state = int(obs)
-    self._done = terminated or truncated
+    scores, target = .0, np.random.random()
+    for ns in range(self._states_num):
+      scores += self.matrix.P[self._state][action][ns]
+      if scores >= target:
+        self._state = ns
+        break
+    reward = self.matrix.R_E[self._state]
+    self._done = self.matrix.done[self._state]
     self._info = {'done': self._done, 'next_state': self._state}
-    return self._state, float(reward), self._info.copy()
+    return self._state, reward, self._done, self._info.copy()
 
   def render(self):
     pass

@@ -16,6 +16,7 @@ class DP_PolicyIteration(RL_Model):
     self.mdp = env.matrix
     self.v = [0]*env._states_num
     self.pi = [[0]*env._actions_num]*env._states_num
+
     self.theta = theta
     self.gamma = gamma
 
@@ -131,7 +132,6 @@ class SARSA(RL_Model):
 
     self.Q = np.zeros((env._states_num, env._actions_num))
     self.pi = np.zeros([env._states_num, env._actions_num])
-    # self.pi = [[0]*env._actions_num]*env._states_num
 
   def take_action(self, state):
     argmax_action = np.argmax(self.Q[state])
@@ -144,7 +144,6 @@ class SARSA(RL_Model):
   def get_policy(self):
     for state in range(self.env._states_num):
       maxQ = np.max(self.Q[state])
-      # a = [0 for _ in range(self.env._actions_num)]
       for i in range(self.env._actions_num):
         if self.Q[state, i] == maxQ:
           self.pi[state, i] = 1
@@ -158,6 +157,66 @@ class SARSA(RL_Model):
         n_state, reward, done, _ = self.env.step(action)
         n_action = self.take_action(n_state)
         self.update(state, action, reward, n_state, n_action)
+        state, action = n_state, n_action
+    self.get_policy()
+
+class nstep_SARSA(RL_Model):
+  def __init__(self, env:ENV_INFO, n_steps, epsilon, alpha, gamma):
+    super().__init__()
+    self.env = env
+    self.matrix = env.matrix
+    self.alpha = alpha
+    self.gamma = gamma
+    self.epsilon = epsilon
+    self.n_steps = n_steps
+
+    self.Q = np.zeros((env._states_num, env._actions_num))
+    self.pi = np.zeros([env._states_num, env._actions_num])
+    self.state_list = []
+    self.action_list = []
+    self.reward_list = []
+
+  def take_action(self, state):
+    argmax_action = np.argmax(self.Q[state])
+    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+  
+  def update(self, s0, a0, r, s1, a1, done):
+    self.state_list.append(s0)
+    self.action_list.append(a0)
+    self.reward_list.append(r)
+    if len(self.state_list) == self.n_steps:
+      G = self.Q[s1, a1]
+      for i in reversed(range(self.n_steps)):
+        G = G*self.gamma+self.reward_list[i]
+        if done and i > 0:
+          s = self.state_list[i]
+          a = self.action_list[i]
+          self.Q[s, a] += self.alpha*(G-self.Q[s, a])
+      s = self.state_list.pop(0)
+      a = self.action_list.pop(0)
+      self.reward_list.pop(0)
+      self.Q[s, a] += self.alpha*(G-self.Q[s, a])
+    if done:
+      self.state_list = []
+      self.action_list = []
+      self.reward_list = []
+
+  def get_policy(self):
+    for state in range(self.env._states_num):
+      maxQ = np.max(self.Q[state])
+      for i in range(self.env._actions_num):
+        if self.Q[state, i] == maxQ:
+          self.pi[state, i] = 1
+
+  def run(self, episodes=50):
+    for episode in range(episodes):
+      state, _ = self.env.reset()
+      action = self.take_action(state)
+      done = False
+      while not done:
+        n_state, reward, done, _ = self.env.step(action)
+        n_action = self.take_action(n_state)
+        self.update(state, action, reward, n_state, n_action, done)
         state, action = n_state, n_action
     self.get_policy()
 
