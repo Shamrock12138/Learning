@@ -154,8 +154,6 @@ class Env_CliffWalking(ENV_INFO):
       for c in range(self.width):
         s = r * self.width + c
         ch = '.'
-        
-        # 标记特殊格子
         if (r, c) == self._start_pos:
           ch = '\033[34mS\033[0m'
         elif (r, c) == self._goal_pos:
@@ -163,7 +161,6 @@ class Env_CliffWalking(ENV_INFO):
         elif s in self._cliff_sta:
           ch = '\033[31mX\033[0m'
         else:
-          # 安全区：显示策略主导动作
           if not self.matrix.done[s]:
             probs = pi[s]
             if np.allclose(probs, np.ones(4)/4):
@@ -172,11 +169,10 @@ class Env_CliffWalking(ENV_INFO):
               best_a = int(np.argmax(probs))
               ch = arrows[best_a]
           else:
-            ch = 'X'  # 其他终止态（不应出现）
+            ch = 'X'
         row_str += f"{ch} "
       row_str = row_str.rstrip() + "|"
       print(row_str)
-    
     print("=" * (self.width * 2 + 1))
 
 class Env_FrozenLake(ENV_INFO):

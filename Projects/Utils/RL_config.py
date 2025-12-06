@@ -38,7 +38,7 @@ class ENV_INFO:
 
   def render(self) -> None:
     '''
-      渲染当前环境（可选实现
+      可视化当前环境（可选实现）
     '''
     pass
 
