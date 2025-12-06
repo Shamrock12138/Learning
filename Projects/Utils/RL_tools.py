@@ -178,17 +178,17 @@ class Env_CliffWalking(ENV_INFO):
 class Env_FrozenLake(ENV_INFO):
   '''
     冰湖环境，MDP，尺寸 4x4
-      s 1 2 3 
-      4 x 6 x 
-      8 9 10 x 
-      x 13 14 o
+    s 1 2 3 
+    4 x 6 x 
+    8 9 10 x 
+    x 13 14 o
+      action: left down right up
   '''
   def __init__(self):
     super().__init__()
-    # 封装官方环境
     self._env = gym.make('FrozenLake-v1', is_slippery=True, render_mode=None)
     self._states_num = 16
-    self._actions_num = 4   # left down right up
+    self._actions_num = 4
 
     self.matrix = MDP(states_num=16, actions_num=4)
     self._build_matrix()
@@ -240,6 +240,49 @@ class Env_FrozenLake(ENV_INFO):
     self._done = self.matrix.done[self._state]
     self._info = {'done': self._done, 'next_state': self._state}
     return self._state, reward, self._done, self._info.copy()
+
+  def render(self):
+    pass
+
+class Env_CartPole(ENV_INFO):
+  '''
+    车杆环境，状态连续，动作离散；
+    控制小车平衡杆子，每坚持一帧，智能体能获得分数为 1 的奖励
+      state(dims): position_car speed_car angle_pole speed_pole_top
+      action: left right
+  '''
+  def __init__(self):
+    super().__init__()
+    self.env = gym.make('CartPole-v1')
+    self._states_num = None
+    self._actions_num = 2
+    self.matrix = None
+
+  def reset(self):
+    obs, info = self.env.reset()
+    self._state = obs.astype(np.float32)
+    self._done = False
+    self._info = {
+      'done': False,
+      'gym_info': info
+    }
+    return self._state, self._info.copy()
+  
+  def step(self, action):
+    if self._done:
+      return self._state, 0.0, True, {'done': True, 'warning': 'env already done'}
+    obs, reward, terminated, truncated, info = self.env.step(action)
+    # CartPole 中，terminated（失败）或 truncated（超时）均视为 episode 结束
+    self._done = terminated or truncated
+    self._state = obs.astype(np.float32)
+    self._info = {
+      'done': self._done,
+      'terminated': terminated,
+      'truncated': truncated,
+      'gym_info': info,
+      'next_state': self._state
+    }
+    return self._state, float(reward), self._done, self._info.copy()
 
   def render(self):
     pass

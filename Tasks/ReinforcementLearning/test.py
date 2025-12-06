@@ -6,6 +6,7 @@ from Projects.Utils.RL_tools import *
 
 env = Env_CliffWalking(height=5, width=5)
 # env = Env_FrozenLake()
+# env = Env_CartPole()
 # env = Env_AimBall()
 
 # agent = DP_ValueIteration(env, 0.001, 0.9)
