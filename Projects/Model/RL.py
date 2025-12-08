@@ -3,16 +3,16 @@
 #                            shamrock
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
-from ..Utils.RL_tools import RTools_epsilon
-from ..Utils.tools import utils_timer
-import copy, random
+from ..Utils.RL_tools import RTools_epsilon, Qnet
+from ..Utils.tools import utils_timer, utils_autoAssign
+import copy, random, torch
 import numpy as np
+
+# Model-Based: DP-P DP-V Dyna-Q
+# Model-Free: SARSA Q-Learning DQN
 
 #---------------------- Dyanemic Programming -------------------------
 #                           2025/12/1
-
-# Model-Free: SARSA Q-Learning
-# Model-Based: DP-P DP-V Dyna-Q
 
 class DP_PolicyIteration(RL_Model):
   '''
@@ -130,6 +130,9 @@ class DP_ValueIteration(RL_Model):
       new_pi = self.get_policy()
       episodes -= 1
     
+#---------------------- SARSA + Q Learning -------------------------
+#                           2025/12/8
+
 class SARSA(RL_Model):
   '''
     SARSA：不需要环境数据（MDP）
@@ -307,14 +310,13 @@ class Q_Learning(RL_Model):
           cnt = 0
     self.get_policy()
 
+#---------------------- Dyna_Q -------------------------
+#                      2025/12/8
+
 class Dyna_Q(RL_Model):
   def __init__(self, env:ENV_INFO, epsilon, alpha, gamma, n_planning):
     super().__init__()
-    self.env = env
-    self.alpha = alpha
-    self.gamma = gamma
-    self.epsilon = epsilon
-    self.n_planning = n_planning
+    utils_autoAssign(self)
     self.model = dict()     # 脑内模拟库
 
     self.Q = np.zeros((env._states_num, env._actions_num))
@@ -385,6 +387,44 @@ class Dyna_Q(RL_Model):
         else:
           cnt = 0
     self.get_policy()
+
+#---------------------- Deep Q Network -------------------------
+#                        2025/12/8
+
+class DQN(RL_Model):
+  def __init__(self, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
+               target_update, device):
+    '''
+      params:
+        state_dim, hidden_dim, action_dim - 维度
+        lr, gamma - learning rate, gamma
+        epsilon - epsilon-greedy
+        target_update - 目标网络更新频率
+        device - device
+    '''
+    super().__init__()
+    utils_autoAssign(self)
+    self.q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+
+  def take_action(self, state):
+    state = torch.tensor([state], dtype=torch.float).to(self.device)
+    argmax_action = self.q_net(state).argmax().item()
+    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+
+  def update(self, transition_dict):
+    states = torch.Tensor(transition_dict['states'], dtype=torch.float).to(self.device)
+    actions = torch.Tensor(transition_dict['actions'], dtype=torch.float).to(self.device)
+    rewards = torch.Tensor(transition_dict['rewards'], dtype=torch.float).to(self.device)
+    next_states = torch.Tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
+    dones = torch.Tensor(transition_dict['dones'], dtype=torch.float).to(self.device)
+
+    q_value = self.q_net(states).gather(1, actions)
+    max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
+    ''' TODO '''
+
+
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

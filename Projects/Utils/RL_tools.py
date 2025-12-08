@@ -8,7 +8,8 @@ import numpy as np
 
 from .RL_config import ENV_INFO, MDP
 import gymnasium as gym
-import pygame
+import pygame, torch
+import torch.nn.functional as F
 
 def _pos_to_state(width, pos: tuple) -> int:
   """将 (row, col) 转为 0 ~ states_num-1 的整数状态编号"""
@@ -481,7 +482,7 @@ class Env_AimBall(ENV_INFO):
               self.matrix.P[s][a][ns] = 1.0
     self.matrix.test()
 
-#---------------------- 采取动作的策略 -------------------------
+#---------------------- 获取 action 的方法 -------------------------
 #                         2025/12/4
 
 def RTools_epsilon(epsilon, n_actions:int, argmax_action:int):
@@ -497,6 +498,21 @@ def RTools_epsilon(epsilon, n_actions:int, argmax_action:int):
   else:
     action = argmax_action
   return action
+
+class Qnet(torch.nn.Module):
+  '''
+    面对连续state或者连续action，使用深度神经网络进行储存、学习。
+    input - state
+    output - action
+  '''
+  def __init__(self, state_dim, hidden_dim, action_dim):
+    super().__init__()
+    self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
+    self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
+
+  def forward(self, state):
+    state = F.relu(self.fc1(state))
+    return self.fc2(state)
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
@@ -574,7 +590,7 @@ def RTools_OccupancyMeasure(episodes, s, a, timestep_max, gamma):
       rho += gamma**i*occur_times[i]/total_times[i]
   return (1-gamma)*rho
 
-#---------------------- 计算状态价值（V） -------------------------
+#---------------------- 获取 value 的方法 -------------------------
 #                         2025/11/30
 
 def RTools_MonteCorlo(episodes, gamma, first_visit=True):
