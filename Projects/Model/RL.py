@@ -7,6 +7,7 @@ from ..Utils.RL_tools import RTools_epsilon, Qnet
 from ..Utils.tools import utils_timer, utils_autoAssign
 import copy, random, torch
 import numpy as np
+import torch.nn.functional as F
 
 # Model-Based: DP-P DP-V Dyna-Q
 # Model-Free: SARSA Q-Learning DQN
@@ -407,6 +408,7 @@ class DQN(RL_Model):
     self.q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+    self.counter = 0
 
   def take_action(self, state):
     state = torch.tensor([state], dtype=torch.float).to(self.device)
@@ -420,9 +422,17 @@ class DQN(RL_Model):
     next_states = torch.Tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
     dones = torch.Tensor(transition_dict['dones'], dtype=torch.float).to(self.device)
 
-    q_value = self.q_net(states).gather(1, actions)
+    q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
     max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
-    ''' TODO '''
+    q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
+    dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
+    
+    self.optimizer.zero_grad()
+    dqn_loss.backward()
+    self.optimizer.step()
+    if self.counter%self.target_update == 0:
+      self.target_q_net.load_state_dict(self.q_net.state_dict())
+    self.counter += 1
 
 
 
