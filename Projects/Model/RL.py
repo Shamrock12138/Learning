@@ -5,9 +5,11 @@
 from ..Utils.RL_config import ENV_INFO, RL_Model
 from ..Utils.RL_tools import RTools_epsilon, Qnet, ReplayBuffer
 from ..Utils.tools import utils_timer, utils_autoAssign
-import copy, random, torch
+import copy, random, torch, time
 import numpy as np
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 # Model-Based: DP-P DP-V Dyna-Q
 # Model-Free: SARSA Q-Learning DQN
@@ -417,7 +419,6 @@ class DQN(RL_Model):
     return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
   
   def update(self, transition_dict):
-    # print(transition_dict['states'].shape)
     states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
     actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(self.device)
     rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
@@ -436,6 +437,31 @@ class DQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
+  def show_history(self, returns_list):
+    episodes_list = list(range(len(returns_list)))
+    plt.plot(episodes_list, returns_list)
+    plt.xlabel('Episodes')
+    plt.ylabel('Returns')
+    plt.title('DQN on {}'.format(self.env.name))
+    plt.show()
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.switch_render(test=True)
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
   @utils_timer
   def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
     '''
@@ -446,18 +472,23 @@ class DQN(RL_Model):
         diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
         quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
     '''
+    returns_list = []
     if episodes is not None:
-      for episode in range(episodes):
+      pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
+      for _ in pbar:
         state, _ = self.env.reset()
         done = False
+        episode = 0
         while not done:
           action = self.take_action(state)
           n_state, reward, done, _ = self.env.step(action)
           self.replay_buffer.add(state, action, reward, n_state, done)
+          episode += reward
           if self.replay_buffer.size() > 50:
             transition_dict, _, _, _, _, _ = self.replay_buffer.sample(32)
             self.update(transition_dict)
           state = n_state
+        returns_list.append(episode)
     else:
       raise ImportError('dont finish')
       times, cnt = 0, 0
@@ -483,7 +514,7 @@ class DQN(RL_Model):
             break
         else:
           cnt = 0
-
+    self.show_history(returns_list)
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

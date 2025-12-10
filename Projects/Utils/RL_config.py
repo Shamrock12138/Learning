@@ -78,11 +78,24 @@ class RL_Model:
     为各类 RL 算法提供统一的外部调用接口。
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
-      - 子类必须实现 `run` 方法，作为模型的核心执行入口；
-      - 通过重载 `__call__`，使实例可直接作为函数调用，提升 API 友好性。
+      - 子类必须实现 `run` 方法，作为模型的核心执行入口
+      - 子类建议实现 show_history 方法，作为训练过程的展示
+      - 子类建议实现 render 方法，作为测试过程的展示
   '''
   def __call__(self, *input, **kwds):
     return self.run(*input, **kwds)
+  
+  def show_history(self, history):
+    '''
+      绘制 history 的变化表
+    '''
+    pass
+
+  def render(self):
+    '''
+      渲染一趟的动画
+    '''
+    pass
   
   def run(self, *input, **kwds):
     raise NotImplementedError('Subclasses must implement the `run` method.')

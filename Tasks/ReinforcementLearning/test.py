@@ -18,10 +18,11 @@ env = Env_CartPole()
 # agent = SARSA(env, 0.1, 0.1, 0.9)
 # agent = Q_Learning(env, 0.3, 0.1, 0.9)
 # agent = Dyna_Q(env, 0.6, 0.1, 0.9, 3)
-agent = DQN(env, env.env.observation_space.shape[0], 128, env.env.action_space.n, 
+agent = DQN(env, env._states_num, 256, env._actions_num, 
             2e-3, 0.98, 0.01, 10, device)
 
-agent(50)
+agent(200)
+agent.render(5)
 # print(agent.Q)
 # print(agent.pi)
 # env.render(agent.pi)

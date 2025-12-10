@@ -28,7 +28,7 @@ class Env_CliffWalking(ENV_INFO):
   def __init__(self, height=4, width=12):
     super().__init__()
     self.matrix = MDP(states_num=height*width, actions_num=4)
-    
+    self.name = 'CliffWalking'
     self.height = height
     self.width = width
     self._states_num = height*width
@@ -190,6 +190,7 @@ class Env_FrozenLake(ENV_INFO):
     self._env = gym.make('FrozenLake-v1', is_slippery=True, render_mode=None)
     self._states_num = 16
     self._actions_num = 4
+    self.name = 'FrozkenLake'
 
     self.matrix = MDP(states_num=16, actions_num=4)
     self._build_matrix()
@@ -254,10 +255,22 @@ class Env_CartPole(ENV_INFO):
   '''
   def __init__(self):
     super().__init__()
-    self.env = gym.make('CartPole-v1')
-    self._states_num = None
-    self._actions_num = 2
+    self.env = self.switch_render()
+    self._states_num = self.env.observation_space.shape[0]  # states 的维数
+    self._actions_num = self.env.action_space.n             # actions
     self.matrix = None
+    self.name = 'CartPole'
+
+  def switch_render(self, test:bool=False):
+    '''
+      切换 self.env ，test=True 时显示动画
+    '''
+    if test:
+      env = gym.make('CartPole-v1', render_mode='human')
+    else:
+      env = gym.make('CartPole-v1', render_mode=None)
+    self.env = env
+    return env
 
   def reset(self):
     obs, info = self.env.reset()
@@ -270,6 +283,11 @@ class Env_CartPole(ENV_INFO):
     return self._state, self._info.copy()
   
   def step(self, action):
+    '''
+    env 执行一步 action 的结果
+      return:
+        next_state, reward, done, info
+    '''
     if self._done:
       return self._state, 0.0, True, {'done': True, 'warning': 'env already done'}
     obs, reward, terminated, truncated, info = self.env.step(action)
@@ -286,7 +304,11 @@ class Env_CartPole(ENV_INFO):
     return self._state, float(reward), self._done, self._info.copy()
 
   def render(self):
-    pass
+    '''
+      渲染一帧的动画
+    '''
+    return self.env.render()
+
 
 class Env_AimBall(ENV_INFO):
   '''
