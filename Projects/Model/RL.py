@@ -3,7 +3,7 @@
 #                            shamrock
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
-from ..Utils.RL_tools import RTools_epsilon, Qnet
+from ..Utils.RL_tools import RTools_epsilon, Qnet, ReplayBuffer
 from ..Utils.tools import utils_timer, utils_autoAssign
 import copy, random, torch
 import numpy as np
@@ -393,7 +393,7 @@ class Dyna_Q(RL_Model):
 #                        2025/12/8
 
 class DQN(RL_Model):
-  def __init__(self, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
                target_update, device):
     '''
       params:
@@ -409,24 +409,26 @@ class DQN(RL_Model):
     self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
     self.counter = 0
+    self.replay_buffer = ReplayBuffer(1000)
 
   def take_action(self, state):
     state = torch.tensor([state], dtype=torch.float).to(self.device)
     argmax_action = self.q_net(state).argmax().item()
     return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
-
+  
   def update(self, transition_dict):
-    states = torch.Tensor(transition_dict['states'], dtype=torch.float).to(self.device)
-    actions = torch.Tensor(transition_dict['actions'], dtype=torch.float).to(self.device)
-    rewards = torch.Tensor(transition_dict['rewards'], dtype=torch.float).to(self.device)
-    next_states = torch.Tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
-    dones = torch.Tensor(transition_dict['dones'], dtype=torch.float).to(self.device)
+    # print(transition_dict['states'].shape)
+    states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
+    actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(self.device)
+    rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
+    next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
+    dones = torch.tensor(transition_dict['dones'], dtype=torch.float).view(-1, 1).to(self.device)
 
     q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
     max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
     q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
     dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
-    
+
     self.optimizer.zero_grad()
     dqn_loss.backward()
     self.optimizer.step()
@@ -434,6 +436,53 @@ class DQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
+  @utils_timer
+  def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
+    '''
+      params:
+        episodes - 
+          None时，提前停止，使用 diff_tol quit_cnt 参数
+          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
+        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
+        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
+    '''
+    if episodes is not None:
+      for episode in range(episodes):
+        state, _ = self.env.reset()
+        done = False
+        while not done:
+          action = self.take_action(state)
+          n_state, reward, done, _ = self.env.step(action)
+          self.replay_buffer.add(state, action, reward, n_state, done)
+          if self.replay_buffer.size() > 50:
+            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(32)
+            self.update(transition_dict)
+          state = n_state
+    else:
+      raise ImportError('dont finish')
+      times, cnt = 0, 0
+      while True:
+        times += 1
+        last_Q = self.Q.copy()
+        state, _ = self.env.reset()
+        done = False
+        while not done:
+          action = self.take_action(state)
+          n_state, reward, done, _ = self.env.step(action)
+          if self.replay_buffer.size() > 50:
+            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(32)
+            self.update(transition_dict)
+          state = n_state
+        current_Q = self.Q.copy()
+        Q_diff = np.abs(current_Q-last_Q).sum()
+        # print(f'Q Δ = {Q_diff:.6f}')
+        if Q_diff < diff_tol:
+          cnt += 1
+          if cnt > quit_cnt:
+            print(f'Finished after {times} times.')
+            break
+        else:
+          cnt = 0
 
 
 #         ,--.                                                 ,--.     

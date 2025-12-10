@@ -8,7 +8,7 @@ import numpy as np
 
 from .RL_config import ENV_INFO, MDP
 import gymnasium as gym
-import pygame, torch
+import pygame, torch, random
 import torch.nn.functional as F
 
 def _pos_to_state(width, pos: tuple) -> int:
@@ -617,10 +617,47 @@ def RTools_MonteCorlo(episodes, gamma, first_visit=True):
   return V
 
 #---------------------- 存储经验 -------------------------
-#                         2025/12/9
+#                       2025/12/9
+import collections
 
 class ReplayBuffer:
-  
+  '''
+    经验回放池
+  '''
+  def __init__(self, capacity):
+    self.buffer = collections.deque(maxlen=capacity)
+
+  def add(self, state, action, reward, next_state, done):
+    self.buffer.append((state, action, reward, next_state, done))
+
+  def sample(self, batch_size):
+    '''
+      从 buffer 中采样数据,数量为 batch_size
+      return:
+        transitions_dict - {
+        'states': (state1, state2 ...),
+        'actions': ...,
+        'next_states': ...,
+        'rewards': ...,
+        'dones': ...
+        }
+      example:
+        state, action, reward, next_state, done = zip(*transitions)
+        np.array(state), action, reward, np.array(next_state), done
+    '''
+    transitions = random.sample(self.buffer, batch_size)
+    state, action, reward, next_state, done = zip(*transitions)
+    transitions_dict = {
+      'states': np.array(state),
+      'actions': action,
+      'next_states': np.array(next_state),
+      'rewards': reward,
+      'dones': done
+    }
+    return transitions_dict, np.array(state), action, reward, np.array(next_state), done
+
+  def size(self):
+    return len(self.buffer)
 
 if __name__ == '__main__':
   env = Env_CliffWalking()
