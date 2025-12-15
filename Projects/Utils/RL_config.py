@@ -2,11 +2,11 @@
 #                           2025/11/29
 #                            shamrock
 
-from pydantic import BaseModel
+from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 import numpy as np
 
-class ENV_INFO:
+class ENV_INFO(ABC):
   '''
     为各类 RL 环境提供统一的外部调用接口。
 
@@ -22,6 +22,21 @@ class ENV_INFO:
     self._actions_num = None  # 动作数
     self.matrix = None    # 例如MDP提供的矩阵
   
+  @abstractmethod
+  def train(self):
+    '''
+      切换训练模式
+    '''
+    pass
+
+  @abstractmethod
+  def eval(self):
+    '''
+      切换测试模式
+    '''
+    pass
+
+  @abstractmethod
   def reset(self, seed, options):
     '''
       重置环境到初始状态
@@ -29,6 +44,7 @@ class ENV_INFO:
     '''
     pass
 
+  @abstractmethod
   def step(self, action) -> Tuple[int, float, bool, dict]:
     '''
       执行一步动作
@@ -36,9 +52,10 @@ class ENV_INFO:
     '''
     pass
 
+  @abstractmethod
   def render(self) -> None:
     '''
-      可视化当前环境（可选实现）
+      渲染一帧动画
     '''
     pass
 

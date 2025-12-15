@@ -255,22 +255,19 @@ class Env_CartPole(ENV_INFO):
   '''
   def __init__(self):
     super().__init__()
-    self.env = self.switch_render()
+    self.env_train = gym.make('CartPole-v1', render_mode=None)
+    self.env_eval = gym.make('CartPole-v1', render_mode='human')
+    self.train()
     self._states_num = self.env.observation_space.shape[0]  # states 的维数
     self._actions_num = self.env.action_space.n             # actions
     self.matrix = None
     self.name = 'CartPole'
 
-  def switch_render(self, test:bool=False):
-    '''
-      切换 self.env ，test=True 时显示动画
-    '''
-    if test:
-      env = gym.make('CartPole-v1', render_mode='human')
-    else:
-      env = gym.make('CartPole-v1', render_mode=None)
-    self.env = env
-    return env
+  def eval(self):
+    self.env = self.env_eval
+
+  def train(self):
+    self.env = self.env_train
 
   def reset(self):
     obs, info = self.env.reset()
@@ -309,7 +306,6 @@ class Env_CartPole(ENV_INFO):
     '''
     return self.env.render()
 
-
 class Env_AimBall(ENV_INFO):
   '''
   类似 CS 的“小球瞄准训练”环境：
@@ -334,10 +330,9 @@ class Env_AimBall(ENV_INFO):
     self,
     screen_width: int = 800,
     screen_height: int = 600,
-    cursor_speed: float = 20.0,        # 像素/步
+    cursor_speed: float = 10.0,        # 像素/步
     target_radius: float = 15.0,       # 像素
-    max_steps: int = 200,
-    # seed: int = None
+    max_steps: int = 100,
   ):
     super().__init__()
     self.width = screen_width
@@ -346,16 +341,9 @@ class Env_AimBall(ENV_INFO):
     self.target_radius = target_radius
     self.max_steps = max_steps
 
-    # 状态/动作维度
-    self._states_num = None  # 连续状态，不预设总数
+    self._states_num = 4
     self._actions_num = 4    # 0:↑, 1:→, 2:↓, 3:←
-    self.matrix = None       # 如需 MDP，需离散化后构建（见 _build_matrix）
-
-    # if seed is not None:
-    #   random.seed(seed)
-    #   np.random.seed(seed)
-
-    self.reset()
+    self.name = 'AimBall'
 
   def _get_state(self):
     # 归一化到 [0,1]
@@ -366,14 +354,23 @@ class Env_AimBall(ENV_INFO):
       self.target_y / self.height
     ], dtype=np.float32)
 
+  def _reset_target(self):
+    margin = self.target_radius + 50
+    self.target_x = np.random.uniform(margin, self.width - margin)
+    self.target_y = np.random.uniform(margin, self.height - margin)
+
+  def train(self):
+    return super().train()
+  
+  def eval(self):
+    return super().eval()
+
   def reset(self):
     # 初始化准星居中
     self.cursor_x = self.width / 2.0
     self.cursor_y = self.height / 2.0
     # 随机生成目标（避开边缘）
-    margin = self.target_radius + 50
-    self.target_x = np.random.uniform(margin, self.width - margin)
-    self.target_y = np.random.uniform(margin, self.height - margin)
+    self._reset_target()
     self.steps = 0
     self._done = False
     self._state = self._get_state()
@@ -386,7 +383,7 @@ class Env_AimBall(ENV_INFO):
 
   def step(self, action: int):
     if self._done:
-        return self._state, 0.0, {'done': True}
+      return self._state, 0.0, {'done': True}
 
     # 移动准星
     dx, dy = 0.0, 0.0
@@ -404,19 +401,21 @@ class Env_AimBall(ENV_INFO):
     self.cursor_x = np.clip(self.cursor_x + dx, 0, self.width)
     self.cursor_y = np.clip(self.cursor_y + dy, 0, self.height)
 
-    # 计算距离
     dist = np.sqrt(
       (self.cursor_x - self.target_x)**2 +
       (self.cursor_y - self.target_y)**2
     )
-
-    # 奖励设计（推荐组合）
-    reward = -dist / np.sqrt(self.width**2 + self.height**2)  # 归一化负距离
     hit = dist <= self.target_radius
+
+    norm_dist = dist / np.sqrt(self.width**2 + self.height**2)
+    reward = -norm_dist*10
+    if 'distance' in self._info:
+      prev_dist = self._info['distance']
+      delta = prev_dist - dist
+      reward += 0.1 * delta    # 每像素 +0.1 → 靠近10px = +1.0
     if hit:
-      reward += 1.0
-      # 可选：立即重置目标 or 等待 episode 结束
-      # self._reset_target()
+      reward += 10.0
+    reward -= 0.01  # 每步微小时间惩罚，防拖延
 
     self.steps += 1
     timeout = self.steps >= self.max_steps
@@ -430,79 +429,257 @@ class Env_AimBall(ENV_INFO):
       'distance': dist
     }
 
-    return self._state, float(reward), self._info.copy()
+    return self._state, float(reward), self._done, self._info.copy()
 
-  def _reset_target(self):
-    margin = self.target_radius + 50
-    self.target_x = np.random.uniform(margin, self.width - margin)
-    self.target_y = np.random.uniform(margin, self.height - margin)
-
-  def render(self, mode='human'):
-    if not hasattr(self, '_screen'):
+  def render(self):
+    if not hasattr(self, '_screen') or self._screen is None:
       pygame.init()
+      pygame.display.set_caption("AimBall Dynamic")
       self._screen = pygame.display.set_mode((self.width, self.height))
       self._clock = pygame.time.Clock()
-    
-    self._screen.fill((0, 0, 0))
-    # 画目标
-    pygame.draw.circle(self._screen, (255, 0, 0), (int(self.target_x), int(self.target_y)), int(self.target_radius))
-    # 画准星（十字）
+
+    # 背景
+    self._screen.fill((30, 30, 30))
+
+    # 目标球（加阴影提升可视性）
+    pygame.draw.circle(self._screen, (200, 50, 50), (int(self.target_x), int(self.target_y)), int(self.target_radius))
+    pygame.draw.circle(self._screen, (255, 100, 100), (int(self.target_x), int(self.target_y)), int(self.target_radius)-3)
+
+    # 准星（更清晰的十字+圆环）
     cx, cy = int(self.cursor_x), int(self.cursor_y)
-    pygame.draw.line(self._screen, (0, 255, 0), (cx-10, cy), (cx+10, cy), 2)
-    pygame.draw.line(self._screen, (0, 255, 0), (cx, cy-10), (cx, cy+10), 2)
+    pygame.draw.line(self._screen, (0, 255, 100), (cx-12, cy), (cx+12, cy), 2)
+    pygame.draw.line(self._screen, (0, 255, 100), (cx, cy-12), (cx, cy+12), 2)
+    pygame.draw.circle(self._screen, (0, 200, 100, 100), (cx, cy), 8, 1)
+
+    # 实时信息
+    font = pygame.font.SysFont(None, 20)
+    info_text = f"Steps: {self.steps} | Dist: {self._info.get('distance', 0):.1f}"
+    if self._info.get('hit', False):
+        info_text += " | HIT!"
+    text = font.render(info_text, True, (255, 255, 255))
+    self._screen.blit(text, (10, 10))
+
     pygame.display.flip()
-    self._clock.tick(30)
+    self._clock.tick(60)  # 更高帧率更流畅
 
-  def _build_matrix(self, grid_size: int = 10):
-    '''
-    将连续状态离散化为 grid_size x grid_size x grid_size x grid_size
-    仅用于小规模验证（如 5x5），实际 RL 推荐直接用连续状态 + DQN/PPO
-    '''
-    n = grid_size
-    nS = n**4
-    nA = 4
-    self._states_num = nS
-    self.matrix = MDP(nS, nA)
+class Env_AimBallDynamic(ENV_INFO):
+  '''
+  动态小球瞄准训练环境：
+    - 小球以一定速度随机移动（或匀速、弹跳）
+    - 智能体控制准星移动
+    - 鼓励快速命中 + 持续跟踪
+  '''
+  def __init__(
+      self,
+      screen_width: int = 800,
+      screen_height: int = 600,
+      cursor_speed: float = 10.0,
+      target_radius: float = 15.0,
+      max_steps: int = 100,
+      target_speed: float = 2.0,              # 小球移动速度（像素/步）
+      target_move_mode: str = 'random_walk',  # 'uniform', 'random_walk', 'teleport'
+      seed: int = None,
+  ):
+      super().__init__()
+      self.width = screen_width
+      self.height = screen_height
+      self.cursor_speed = cursor_speed
+      self.target_radius = target_radius
+      self.max_steps = max_steps
+      self.target_speed = target_speed
+      self.target_move_mode = target_move_mode
 
-    # 初始化
-    self.matrix.P = [[[0.0]*nS for _ in range(nA)] for _ in range(nS)]
-    self.matrix.R_E = [0.0]*nS
-    self.matrix.done = [False]*nS
+      if seed is not None:
+          np.random.seed(seed)
 
-    # 离散化映射：s = ix + iy*n + itx*n^2 + ity*n^3
-    def encode(ix, iy, itx, ity):
-      return ix + iy*n + itx*n*n + ity*n*n*n
+      self._states_num = 6  # [cx, cy, tx, ty, tvx, tvy] 或 [cx, cy, tx, ty, vx, vy]
+      self._actions_num = 4
+      self.name = 'AimBall-Dynamic'
 
-    for ix in range(n):
-      for iy in range(n):
-        for itx in range(n):
-          for ity in range(n):
-            s = encode(ix, iy, itx, ity)
-            cx = (ix + 0.5) / n * self.width
-            cy = (iy + 0.5) / n * self.height
-            tx = (itx + 0.5) / n * self.width
-            ty = (ity + 0.5) / n * self.height
-            dist = np.sqrt((cx-tx)**2 + (cy-ty)**2)
-            hit = dist <= self.target_radius
+  def _get_state(self) -> np.ndarray:
+      # 归一化：位置 ∈ [0,1]；速度 ∈ [-1,1] → 归一化到 [-target_speed_norm, +target_speed_norm]
+      speed_norm = max(self.width, self.height) / 2.0
+      return np.array([
+          self.cursor_x / self.width,
+          self.cursor_y / self.height,
+          self.target_x / self.width,
+          self.target_y / self.height,
+          self.target_vx / speed_norm,
+          self.target_vy / speed_norm
+      ], dtype=np.float32)
 
-            if hit:
-              self.matrix.done[s] = True
-              self.matrix.R_E[s] = 1.0
-            else:
-              self.matrix.R_E[s] = -dist / np.sqrt(self.width**2 + self.height**2)
+  def _reset_target(self):
+      margin = self.target_radius + 50
+      self.target_x = np.random.uniform(margin, self.width - margin)
+      self.target_y = np.random.uniform(margin, self.height - margin)
+      # 初始化速度
+      angle = np.random.uniform(0, 2 * np.pi)
+      self.target_vx = self.target_speed * np.cos(angle)
+      self.target_vy = self.target_speed * np.sin(angle)
 
-            for a in range(nA):
-              # 模拟移动
-              dx, dy = [0, self.cursor_speed, 0, -self.cursor_speed][a], \
-                        [-self.cursor_speed, 0, self.cursor_speed, 0][a]
-              ncx = np.clip(cx + dx, 0, self.width)
-              ncy = np.clip(cy + dy, 0, self.height)
-              # 目标假设不变（简化）
-              nix = min(n-1, int(ncx / self.width * n))
-              niy = min(n-1, int(ncy / self.height * n))
-              ns = encode(nix, niy, itx, ity)
-              self.matrix.P[s][a][ns] = 1.0
-    self.matrix.test()
+  def reset(self):
+      self.cursor_x = self.width / 2.0
+      self.cursor_y = self.height / 2.0
+      self._reset_target()
+      self.steps = 0
+      self._done = False
+      self._state = self._get_state()
+      self._info = {
+          'done': False,
+          'steps': self.steps,
+          'hit': False,
+          'distance': np.linalg.norm([self.cursor_x - self.target_x, self.cursor_y - self.target_y])
+      }
+      return self._state, self._info.copy()
+
+  def _update_target(self):
+      if self.target_move_mode == 'uniform':
+          # 匀速直线运动 + 边界反弹
+          self.target_x += self.target_vx
+          self.target_y += self.target_vy
+
+          # 边界反弹（弹性反射）
+          if self.target_x <= self.target_radius or self.target_x >= self.width - self.target_radius:
+              self.target_vx *= -1
+              self.target_x = np.clip(self.target_x, self.target_radius, self.width - self.target_radius)
+          if self.target_y <= self.target_radius or self.target_y >= self.height - self.target_radius:
+              self.target_vy *= -1
+              self.target_y = np.clip(self.target_y, self.target_radius, self.height - self.target_radius)
+
+      elif self.target_move_mode == 'random_walk':
+          # 随机扰动方向（每步小角度偏转）
+          angle_noise = np.random.normal(0, np.pi / 8)  # ~22.5° 标准差
+          speed = np.sqrt(self.target_vx**2 + self.target_vy**2)
+          current_angle = np.arctan2(self.target_vy, self.target_vx)
+          new_angle = current_angle + angle_noise
+          self.target_vx = speed * np.cos(new_angle)
+          self.target_vy = speed * np.sin(new_angle)
+
+          self.target_x += self.target_vx
+          self.target_y += self.target_vy
+
+          # 碰壁反弹（同上）
+          if self.target_x <= self.target_radius or self.target_x >= self.width - self.target_radius:
+              self.target_vx *= -1
+              self.target_x = np.clip(self.target_x, self.target_radius, self.width - self.target_radius)
+          if self.target_y <= self.target_radius or self.target_y >= self.height - self.target_radius:
+              self.target_vy *= -1
+              self.target_y = np.clip(self.target_y, self.target_radius, self.height - self.target_radius)
+
+      elif self.target_move_mode == 'teleport':
+          # 每隔若干步（如每 30 步）随机跳转
+          if self.steps % 30 == 0 and self.steps > 0:
+              margin = self.target_radius + 50
+              self.target_x = np.random.uniform(margin, self.width - margin)
+              self.target_y = np.random.uniform(margin, self.height - margin)
+              # 重置速度方向
+              angle = np.random.uniform(0, 2 * np.pi)
+              self.target_vx = self.target_speed * np.cos(angle)
+              self.target_vy = self.target_speed * np.sin(angle)
+          else:
+              self.target_x += self.target_vx
+              self.target_y += self.target_vy
+              # 边界限制（不反弹，仅 clamp）
+              self.target_x = np.clip(self.target_x, self.target_radius, self.width - self.target_radius)
+              self.target_y = np.clip(self.target_y, self.target_radius, self.height - self.target_radius)
+
+  def step(self, action: int):
+      if self._done:
+          return self._state, 0.0, True, self._info.copy()
+
+      # 移动准星
+      dx, dy = 0.0, 0.0
+      if action == 0:   # ↑
+          dy = -self.cursor_speed
+      elif action == 1: # →
+          dx = self.cursor_speed
+      elif action == 2: # ↓
+          dy = self.cursor_speed
+      elif action == 3: # ←
+          dx = -self.cursor_speed
+      else:
+          raise ValueError(f"Invalid action: {action}")
+
+      self.cursor_x = np.clip(self.cursor_x + dx, 0, self.width)
+      self.cursor_y = np.clip(self.cursor_y + dy, 0, self.height)
+
+      # 更新目标位置（关键改动！）
+      self._update_target()
+
+      # 计算距离
+      dist = np.sqrt(
+          (self.cursor_x - self.target_x)**2 +
+          (self.cursor_y - self.target_y)**2
+      )
+      hit = dist <= self.target_radius
+
+      norm_dist = dist / np.sqrt(self.width**2 + self.height**2)
+      reward = -norm_dist*10
+      if 'distance' in self._info:
+        prev_dist = self._info['distance']
+        delta = prev_dist - dist
+        reward += 0.1 * delta    # 每像素 +0.1 → 靠近10px = +1.0
+      if hit:
+        reward += 10.0
+      reward -= 0.01  # 每步微小时间惩罚，防拖延
+
+      self.steps += 1
+      timeout = self.steps >= self.max_steps
+      self._done = timeout or hit
+
+      self._state = self._get_state()
+      self._info = {
+          'done': self._done,
+          'steps': self.steps,
+          'hit': hit,
+          'distance': dist,
+          'target_pos': (self.target_x, self.target_y),
+          'cursor_pos': (self.cursor_x, self.cursor_y)
+      }
+
+      return self._state, float(reward), self._done, self._info.copy()
+
+  def render(self):
+      if not hasattr(self, '_screen') or self._screen is None:
+          pygame.init()
+          pygame.display.set_caption("AimBall Dynamic")
+          self._screen = pygame.display.set_mode((self.width, self.height))
+          self._clock = pygame.time.Clock()
+
+      # 背景
+      self._screen.fill((30, 30, 30))
+
+      # 目标球（加阴影提升可视性）
+      pygame.draw.circle(self._screen, (200, 50, 50), (int(self.target_x), int(self.target_y)), int(self.target_radius))
+      pygame.draw.circle(self._screen, (255, 100, 100), (int(self.target_x), int(self.target_y)), int(self.target_radius)-3)
+
+      # 准星（更清晰的十字+圆环）
+      cx, cy = int(self.cursor_x), int(self.cursor_y)
+      pygame.draw.line(self._screen, (0, 255, 100), (cx-12, cy), (cx+12, cy), 2)
+      pygame.draw.line(self._screen, (0, 255, 100), (cx, cy-12), (cx, cy+12), 2)
+      pygame.draw.circle(self._screen, (0, 200, 100, 100), (cx, cy), 8, 1)
+
+      # 实时信息
+      font = pygame.font.SysFont(None, 20)
+      info_text = f"Steps: {self.steps} | Dist: {self._info.get('distance', 0):.1f}"
+      if self._info.get('hit', False):
+          info_text += " | HIT!"
+      text = font.render(info_text, True, (255, 255, 255))
+      self._screen.blit(text, (10, 10))
+
+      pygame.display.flip()
+      self._clock.tick(60)  # 更高帧率更流畅
+
+  def close(self):
+      if hasattr(self, '_screen') and self._screen:
+          pygame.quit()
+          self._screen = None
+
+  def train(self):
+    return super().train()
+  
+  def eval(self):
+    return super().eval()
 
 #---------------------- 获取 action 的方法 -------------------------
 #                         2025/12/4
@@ -530,11 +707,11 @@ class Qnet(torch.nn.Module):
   def __init__(self, state_dim, hidden_dim, action_dim):
     super().__init__()
     self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
-    self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
+    self.fc3 = torch.nn.Linear(hidden_dim, action_dim)
 
   def forward(self, state):
     state = F.relu(self.fc1(state))
-    return self.fc2(state)
+    return self.fc3(state)
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29

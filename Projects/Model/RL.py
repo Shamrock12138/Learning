@@ -414,7 +414,7 @@ class DQN(RL_Model):
     self.replay_buffer = ReplayBuffer(1000)
 
   def take_action(self, state):
-    state = torch.tensor([state], dtype=torch.float).to(self.device)
+    state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
     argmax_action = self.q_net(state).argmax().item()
     return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
   
@@ -449,7 +449,7 @@ class DQN(RL_Model):
     '''
       渲染 times 趟动画
     '''
-    self.env.switch_render(test=True)
+    self.env.eval()
     pbar = tqdm(iterable=range(times), desc='test')
     for T in pbar:
       done = False
@@ -484,8 +484,8 @@ class DQN(RL_Model):
           n_state, reward, done, _ = self.env.step(action)
           self.replay_buffer.add(state, action, reward, n_state, done)
           episode += reward
-          if self.replay_buffer.size() > 50:
-            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(32)
+          if self.replay_buffer.size() > 100:
+            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
             self.update(transition_dict)
           state = n_state
         returns_list.append(episode)
