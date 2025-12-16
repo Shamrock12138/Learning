@@ -59,6 +59,36 @@ class ENV_INFO(ABC):
     '''
     pass
 
+class RL_Model:
+  '''
+    为各类 RL 算法提供统一的外部调用接口。
+
+    该类本身不实现具体算法逻辑，而是定义标准接口协议：
+      - 子类必须实现 `run` 方法，作为模型的核心执行入口
+      - 子类建议实现 show_history 方法，作为训练过程的展示
+      - 子类建议实现 render 方法，作为测试过程的展示
+  '''
+  def __call__(self, *input, **kwds):
+    return self.run(*input, **kwds)
+  
+  def show_history(self, history):
+    '''
+      绘制 history 的变化表
+    '''
+    pass
+
+  def render(self):
+    '''
+      渲染一趟的动画
+    '''
+    pass
+  
+  def run(self, *input, **kwds):
+    '''
+      模型程序入口
+    '''
+    raise NotImplementedError('Subclasses must implement the `run` method.')
+
 class MDP:
   '''
     配置 马尔可夫 过程
@@ -89,33 +119,6 @@ class MDP:
       raise ValueError("Reward matrix R must be provided explicitly.")
     if not self.done:
       raise ValueError("Done matrix done must be provided explicitly.")
-
-class RL_Model:
-  '''
-    为各类 RL 算法提供统一的外部调用接口。
-
-    该类本身不实现具体算法逻辑，而是定义标准接口协议：
-      - 子类必须实现 `run` 方法，作为模型的核心执行入口
-      - 子类建议实现 show_history 方法，作为训练过程的展示
-      - 子类建议实现 render 方法，作为测试过程的展示
-  '''
-  def __call__(self, *input, **kwds):
-    return self.run(*input, **kwds)
-  
-  def show_history(self, history):
-    '''
-      绘制 history 的变化表
-    '''
-    pass
-
-  def render(self):
-    '''
-      渲染一趟的动画
-    '''
-    pass
-  
-  def run(self, *input, **kwds):
-    raise NotImplementedError('Subclasses must implement the `run` method.')
 
 if __name__ == '__main__':
   pass
