@@ -11,6 +11,7 @@ import gymnasium as gym
 import pygame, torch, random
 import torch.nn.functional as F
 
+
 def _pos_to_state(width, pos: tuple) -> int:
   """将 (row, col) 转为 0 ~ states_num-1 的整数状态编号"""
   r, c = pos
