@@ -18,6 +18,7 @@ class GA(EC_Model):
     utils_autoAssign()
     self.pop = self.init_population()   # population
     self.fits = []  # fitness population
+    self.chroms = []
 
   def init_population(self):
     return [np.random.randint(0, 2, self.chrom_len).tolist() for _ in range(self.pop_size)]
@@ -41,10 +42,10 @@ class GA(EC_Model):
 
   def mutation(self):
     """位翻转变异"""
-    for i in range(len(self.chrom)):
+    for i in range(len(self.chroms)):
       if random.random() < self.pm:
-        self.chrom[i] = 1 - self.chrom[i]
-    return self.chrom
+        self.chroms[i] = 1 - self.chroms[i]
+    return self.chroms
 
   def fitness(x):
     '''
