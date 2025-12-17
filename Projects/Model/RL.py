@@ -133,8 +133,8 @@ class DP_ValueIteration(RL_Model):
       new_pi = self.get_policy()
       episodes -= 1
     
-#---------------------- SARSA + Q Learning -------------------------
-#                           2025/12/8
+#---------------------- SARSA -------------------------
+#                      2025/12/8
 
 class SARSA(RL_Model):
   '''
@@ -242,6 +242,9 @@ class SARSA_nstep(RL_Model):
         self.update(state, action, reward, n_state, n_action, done)
         state, action = n_state, n_action
     self.get_policy()
+
+#---------------------- Q Learning -------------------------
+#                        2025/12/8
 
 class Q_Learning(RL_Model):
   def __init__(self, env:ENV_INFO, epsilon, alpha, gamma):

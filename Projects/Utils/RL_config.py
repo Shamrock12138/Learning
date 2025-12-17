@@ -4,7 +4,6 @@
 
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
-import numpy as np
 
 class ENV_INFO(ABC):
   '''
@@ -83,11 +82,12 @@ class RL_Model:
     '''
     pass
   
+  @abstractmethod
   def run(self, *input, **kwds):
     '''
       模型程序入口
     '''
-    raise NotImplementedError('Subclasses must implement the `run` method.')
+    pass
 
 class MDP:
   '''
