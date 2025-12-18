@@ -47,6 +47,7 @@ class GA(EC_Model):
         chroms[i] = 1-chroms[i]
     return chroms
 
+  @utils_timer
   def run(self, x, gens):
     pop = self.init_population()
     for gen in range(gens):
