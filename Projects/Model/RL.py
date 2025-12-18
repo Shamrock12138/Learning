@@ -4,7 +4,7 @@
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
 from ..Utils.RL_tools import RTools_epsilon, Qnet, ReplayBuffer
-from ..Utils.tools import utils_timer, utils_autoAssign
+from ..Utils.tools import utils_timer, utils_autoAssign, utils_showHistory
 import copy, random, torch, time
 import numpy as np
 import torch.nn.functional as F
@@ -441,12 +441,8 @@ class DQN(RL_Model):
     self.counter += 1
 
   def show_history(self, returns_list):
-    episodes_list = list(range(len(returns_list)))
-    plt.plot(episodes_list, returns_list)
-    plt.xlabel('Episodes')
-    plt.ylabel('Returns')
-    plt.title('DQN on {}'.format(self.env.name))
-    plt.show()
+    utils_showHistory(returns_list, 'DQN on {}'.format(self.env.name), 
+                      'Episodes', 'Returns')
 
   def render(self, times:int=1):
     '''
