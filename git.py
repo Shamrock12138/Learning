@@ -10,13 +10,6 @@ from pathlib import Path
 #----------------- 要提交的文件 ----------------
 
 submit_files = [
-  # '.\\Projects\\',
-  # '.\\Tasks\\DeepLearning\\',
-  # '.\\Tasks\\DeepLearning\\**\\*.ipynb',
-  # '.\\Tasks\\DeepLearning\\**\\*.jpg',
-  # '.\\Tasks\\ReinforcementLearning\\**\\*.ipynb',
-  # '.\\Tasks\\ReinforcementLearning\\**\\*.jpg',
-  # '.\\Tasks\\ReinforcementLearning\\'
   '.'
 ]
 
