@@ -10,9 +10,9 @@ device = utils_getDevice()
 
 # env = Env_CliffWalking(height=5, width=5)
 # env = Env_FrozenLake()
-env = Env_CartPole()
+# env = Env_CartPole()
 # env = Env_AimBall()
-# env = Env_AimBallDynamic(target_move_mode='uniform')
+env = Env_AimBallDynamic(target_move_mode='uniform')
 
 # agent = DP_ValueIteration(env, 0.001, 0.9)
 # agent = DP_PolicyIteration(env, 0.001, 0.9)
@@ -23,6 +23,6 @@ env = Env_CartPole()
 agent = DQN(env, env._states_num, 256, env._actions_num, 
             2e-3, 0.98, 0.01, 10, device)
 
-agent(50)
+agent(300)
 agent.render(10)
 

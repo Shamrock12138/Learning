@@ -16,9 +16,6 @@ class GA(EC_Model):
   def __init__(self, problem:EC_Problem, pop_size, chrom_len, pc, pm):
     super().__init__()
     utils_autoAssign()
-    # self.pop = self.init_population()   # population
-    # self.fits = []  # fitness population
-    # self.chroms = []
 
   def init_population(self):
     return [np.random.randint(0, 2, self.chrom_len).tolist() for _ in range(self.pop_size)]

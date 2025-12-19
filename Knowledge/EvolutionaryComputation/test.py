@@ -1,6 +1,5 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-# print(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from Projects.Model.EC import *
 # from Projects.Utils.EC_tools import *
