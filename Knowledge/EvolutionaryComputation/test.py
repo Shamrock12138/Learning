@@ -17,4 +17,4 @@ class Problem(EC_Problem):
 problem = Problem()
 
 ga = GA(problem=problem)
-
+ga(50)

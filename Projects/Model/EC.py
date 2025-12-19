@@ -13,9 +13,9 @@ import random
 #                           2025/12/17
 
 class GA(EC_Model):
-  def __init__(self, problem:EC_Problem, pop_size, chrom_len, pc, pm):
+  def __init__(self, problem:EC_Problem, pop_size=50, chrom_len=16, pc=0.8, pm=0.01):
     super().__init__()
-    utils_autoAssign()
+    utils_autoAssign(self)
 
   def init_population(self):
     return [np.random.randint(0, 2, self.chrom_len).tolist() for _ in range(self.pop_size)]
@@ -45,14 +45,15 @@ class GA(EC_Model):
     return chroms
 
   @utils_timer
-  def run(self, x, gens):
+  def run(self, gens):
     pop = self.init_population()
     for gen in range(gens):
       xs = [self.problem.decode(chorm, n_bits=self.chrom_len) for chorm in pop]
       fits = [self.problem.fitness(x) for x in xs]
       best_idx = np.argmax(fits)
     
-      mating_pool = self.selection(population, fits)
+      mating_pool = self.selection(pop, fits)
+      print(f"{gen:3d} | {xs[best_idx]:7.4f} | {fits[best_idx]:6.4f}")
       
       # 交叉 + 变异 → 新种群
       new_pop = []
@@ -61,11 +62,11 @@ class GA(EC_Model):
         c1, c2 = self.crossover(p1, p2)
         new_pop.append(self.mutation(c1))
         new_pop.append(self.mutation(c2))
-      population = new_pop[:self.pop_size]
+      pop = new_pop[:self.pop_size]
 
     # 输出结果
-    best_x = self.problem.decode(population[best_idx], n_bits=self.chrom_len)
-    print(f"\n✅ 最优解: x = {best_x:.6f}, f(x) = {self.problem.fitness(best_x):.6f}")
+    best_x = self.problem.decode(pop[best_idx], n_bits=self.chrom_len)
+    print(f"\n最优解: x = {best_x:.6f}, f(x) = {self.problem.fitness(best_x):.6f}")
 
     
 
