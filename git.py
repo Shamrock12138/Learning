@@ -120,11 +120,13 @@ def git_merge(src_branch, target_branch, cwd=None):
     # 4. 拉取远程最新（避免过期）
     print(f"\033[34m Fetching latest updates for remote '{target_branch}'... \033[0m")
     run_git_cmd(["pull", "origin", target_branch], cwd=cwd)
+    print(f"\033[34m Fetching updates for source branch '{src_branch}'... \033[0m")
+    run_git_cmd(["fetch", "origin", src_branch], cwd=cwd)
 
     # 5. 执行合并
     print(f"\033[34m Executing merge: git merge {src_branch} \033[0m")
     stdout, stderr = run_git_cmd(
-      ["merge", src_branch, "--no-edit"],  # --no-edit 避免打开编辑器
+      ["merge", "origin/{src_branch}", "--no-edit"],  # --no-edit 避免打开编辑器
       cwd=cwd,
       allow_fail=True
     )
