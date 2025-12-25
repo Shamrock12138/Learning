@@ -858,6 +858,15 @@ class ReplayBuffer:
   def size(self):
     return len(self.buffer)
 
+class HER:
+  '''
+    Hindsight Experience Replay - 事后经验回放
+    论文：
+      "Hindsight Experience Replay" - arXiv:1707.01495（2017）
+  '''
+  def __init__(self):
+    pass
+
 if __name__ == '__main__':
   env = Env_CliffWalking()
   # print(env.matrix.P)
