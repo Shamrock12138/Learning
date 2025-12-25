@@ -538,6 +538,18 @@ class DQN(RL_Model):
         else:
           cnt = 0
 
+#---------------------- Double DQN -------------------------
+#                        2025/12/25
+
+class DDQN(RL_Model):
+  def __init__(self, env:ENV_INFO, ):
+    utils_autoAssign(self)
+    
+
+  @utils_timer
+  def run(episodes=100):
+
+
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
