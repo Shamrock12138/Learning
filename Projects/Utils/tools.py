@@ -53,18 +53,27 @@ def utils_autoAssign(self):
       continue
     setattr(self, name, local_vars[name])
 
-def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str):
+def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str, save_path=None):
   '''
     显示 history 的曲线图，x轴y轴为 x_lable, y_lable，标题为 title
       params:
         history - 列表
         title, x_lable, y_lable - 字符串
+        save_path - 保存路径，默认None不保存
   '''
   episodes_list = list(range(len(history)))
   plt.plot(episodes_list, history)
   plt.xlabel(x_lable)
   plt.ylabel(y_lable)
   plt.title(title)
+  plt.grid(True)  # 增强可读性
+  plt.tight_layout()  # 防止标签被裁剪
+
+  if save_path:
+    import os
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
   plt.show()
   
 #         ,--.                                                 ,--.     

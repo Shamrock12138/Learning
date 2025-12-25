@@ -5,7 +5,7 @@
 from ..Utils.RL_config import ENV_INFO, RL_Model
 from ..Utils.RL_tools import RTools_epsilon, Qnet, ReplayBuffer
 from ..Utils.tools import utils_timer, utils_autoAssign, utils_showHistory
-import copy, random, torch, time
+import copy, random, torch, time, os
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -410,11 +410,14 @@ class DQN(RL_Model):
     '''
     super().__init__()
     utils_autoAssign(self)
+
     self.q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
-    self.counter = 0
     self.replay_buffer = ReplayBuffer(1000)
+
+    self.counter = 0
+    self.history = []
 
   def take_action(self, state):
     state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
@@ -440,9 +443,10 @@ class DQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
-  def show_history(self, returns_list):
-    utils_showHistory(returns_list, 'DQN on {}'.format(self.env.name), 
-                      'Episodes', 'Returns')
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory(self.history, 'DQN on {}'.format(self.env.name), 
+                      'Episodes', 'Returns', path)
 
   def render(self, times:int=1):
     '''
@@ -461,6 +465,26 @@ class DQN(RL_Model):
         self.env.render()
         time.sleep(1/60)
 
+  def save_model(self, dir_path, name):
+    path = dir_path+name
+    checkpoint = {
+      'q_net_state': self.q_net.state_dict(),
+      'target_q_net_state': self.target_q_net.state_dict(),
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
+
+  def load_model(self, dir_path, name):
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device)
+    self.q_net.load_state_dict(checkpoint['q_net_state'])
+    self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+    print(f"Model loaded from {path}")
+
   @utils_timer
   def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
     '''
@@ -471,7 +495,7 @@ class DQN(RL_Model):
         diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
         quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
     '''
-    returns_list = []
+    # returns_list = []
     if episodes is not None:
       pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
       for _ in pbar:
@@ -487,7 +511,7 @@ class DQN(RL_Model):
             transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
             self.update(transition_dict)
           state = n_state
-        returns_list.append(episode)
+        self.history.append(episode)
     else:
       raise ImportError('dont finish')
       times, cnt = 0, 0
@@ -513,7 +537,6 @@ class DQN(RL_Model):
             break
         else:
           cnt = 0
-    self.show_history(returns_list)
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

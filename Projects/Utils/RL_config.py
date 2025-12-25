@@ -66,6 +66,7 @@ class RL_Model:
       - 子类必须实现 `run` 方法，作为模型的核心执行入口
       - 子类建议实现 show_history 方法，作为训练过程的展示
       - 子类建议实现 render 方法，作为测试过程的展示
+      - 子类建议实现 save_model, load_model 方法，作为保存加载模型
   '''
   def __call__(self, *input, **kwds):
     return self.run(*input, **kwds)
@@ -82,6 +83,18 @@ class RL_Model:
     '''
     pass
   
+  def save_model(self, dir_path:str, name:str):
+    '''
+      保存在 dir_path/name 路径中
+    '''
+    pass
+
+  def load_model(self, dir_path:str, name:str):
+    '''
+      加载 dir_path/name 路径中的模型
+    '''
+    pass
+
   @abstractmethod
   def run(self, *input, **kwds):
     '''
