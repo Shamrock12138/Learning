@@ -306,23 +306,23 @@ class Env_CartPole(ENV_INFO):
     '''
     return self.env.render()
 
-class Env_Pendulum(ENV_INFO):
-  def __init__(self):
-    self.env = gym.make('Pendulum-v0')
-    self._states_num = 
-    self._actions_num = 
+# class Env_Pendulum(ENV_INFO):
+#   def __init__(self):
+#     self.env = gym.make('Pendulum-v0')
+#     self._states_num = 
+#     self._actions_num = 
 
-  def train(self):
-    pass
+#   def train(self):
+#     pass
 
-  def eval(self):
-    pass
+#   def eval(self):
+#     pass
 
-  def step(self):
-    pass
+#   def step(self):
+#     pass
 
-  def reset(self):
-    pass
+#   def reset(self):
+#     pass
 
 class Env_AimBall(ENV_INFO):
   '''
