@@ -4,7 +4,7 @@
 
 from functools import wraps
 import numpy as np
-import time, torch, inspect
+import time, torch, inspect, os
 import matplotlib.pyplot as plt
 
 def utils_timer(func):
@@ -70,12 +70,53 @@ def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str, save_pa
   plt.tight_layout()  # 防止标签被裁剪
 
   if save_path:
-    import os
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
 
   plt.show()
   
+def utils_saveModel(dir_path, name, checkpoint):
+  '''
+    将 checkpoint 的参数的模型保存到 dir_path+name 的.pt文件中，
+    注：name后缀名为.pt
+      params:
+        dir_path - 一般为文件夹路径
+        name - 要保存的文件名 .pt
+        checkout - 模型参数，例：
+          checkpoint = {
+            'q_net_state': self.q_net.state_dict(),
+            'target_q_net_state': self.target_q_net.state_dict(),
+            'optimizer_state': self.optimizer.state_dict(),
+          }
+  '''
+  path = dir_path+name
+  os.makedirs(os.path.dirname(path), exist_ok=True)
+  torch.save(checkpoint, path)
+  print(f"Model saved to {path}")
+
+def utils_loadModel(dir_path, name, device):
+  '''
+    加载 dir_path+name 的.pt文件中的参数的模型，返回 checkpoint
+      params:
+        dir_path - 一般为文件夹路径
+        name - 要保存的文件名 .pt
+      return:
+        checkout - 模型参数，例：
+          checkpoint = {
+            'q_net_state': self.q_net.state_dict(),
+            'target_q_net_state': self.target_q_net.state_dict(),
+            'optimizer_state': self.optimizer.state_dict(),
+          }
+  '''
+  path = dir_path+name
+  if not os.path.exists(path):
+    raise FileNotFoundError(f"Model file not found: {path}")
+  checkpoint = torch.load(path, map_location=device)
+  # self.q_net.load_state_dict(checkpoint['q_net_state'])
+  # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+  print(f"Model loaded from {path}")
+  return checkpoint
+
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
