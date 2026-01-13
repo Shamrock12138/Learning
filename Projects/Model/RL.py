@@ -3,7 +3,7 @@
 #                            shamrock
 
 from ..Utils.RL_config import ENV_INFO, RL_Model
-from ..Utils.RL_tools import RTools_epsilon, Qnet, ReplayBuffer
+from ..Utils.RL_tools import *
 from ..Utils.tools import *
 import copy, random, torch, time, os
 import numpy as np
@@ -415,6 +415,7 @@ class DQN(RL_Model):
     self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
     self.replay_buffer = ReplayBuffer(1000)
+    self.name = 'DQN'
 
     self.counter = 0
     self.history = []
@@ -559,6 +560,7 @@ class DoubleDQN(RL_Model):
     self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
     self.replay_buffer = ReplayBuffer(1000)
+    self.name = 'Double_DQN'
 
     self.counter = 0
     self.history = []
@@ -590,7 +592,7 @@ class DoubleDQN(RL_Model):
 
   def show_history(self, save_dir=None, name=None):
     path = save_dir+name if save_dir and name else None
-    utils_showHistory(self.history, 'DQN on {}'.format(self.env.name), 
+    utils_showHistory(self.history, 'Double DQN on {}'.format(self.env.name), 
                       'Episodes', 'Returns', path)
 
   def render(self, times:int=1):
@@ -653,8 +655,105 @@ class DoubleDQN(RL_Model):
 #                        2026/1/11
 
 class DuelingDQN(RL_Model):
-  def __init__(self, env:ENV_INFO, ):
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
+               target_update, device):
     super().__init__()
+    utils_autoAssign(self)
+
+    self.q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+    self.replay_buffer = ReplayBuffer(1000)
+    self.name = 'Dueling_DQN'
+
+    self.counter = 0
+    self.history = []
+
+  def take_action(self, state):
+    state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+    argmax_action = self.q_net(state).argmax().item()
+    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+  
+  def update(self, transition_dict):
+    states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
+    actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(self.device)
+    rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
+    next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
+    dones = torch.tensor(transition_dict['dones'], dtype=torch.float).view(-1, 1).to(self.device)
+
+    q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
+    max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
+    q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
+    dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
+
+    self.optimizer.zero_grad()
+    dqn_loss.backward()
+    self.optimizer.step()
+    if self.counter%self.target_update == 0:
+      self.target_q_net.load_state_dict(self.q_net.state_dict())
+    self.counter += 1
+
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory(self.history, 'Dueling DQN on {}'.format(self.env.name), 
+                      'Episodes', 'Returns', path)
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
+  def save_model(self, dir_path, name):
+    checkpoint = {
+      'q_net_state': self.q_net.state_dict(),
+      'target_q_net_state': self.target_q_net.state_dict(),
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    utils_saveModel(dir_path, name, checkpoint)
+
+  def load_model(self, dir_path, name):
+    checkpoint = utils_loadModel(dir_path, name, self.device)
+    self.q_net.load_state_dict(checkpoint['q_net_state'])
+    self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+
+  @utils_timer
+  def run(self, episodes=None):
+    '''
+      params:
+        episodes - 
+          None时，提前停止，使用 diff_tol quit_cnt 参数
+          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
+        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
+        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
+    '''
+    pbar = tqdm(iterable=range(episodes), desc='DDQN Iterable')
+    for _ in pbar:
+      state, _ = self.env.reset()
+      done = False
+      episode = 0
+      while not done:
+        action = self.take_action(state)
+        n_state, reward, done, _ = self.env.step(action)
+        self.replay_buffer.add(state, action, reward, n_state, done)
+        episode += reward
+        if self.replay_buffer.size() > 100:
+          transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
+          self.update(transition_dict)
+        state = n_state
+      self.history.append(episode)
+
 
 
 #         ,--.                                                 ,--.     

@@ -7,18 +7,8 @@ import numpy as np
 import time, torch, inspect, os
 import matplotlib.pyplot as plt
 
-def utils_timer(func):
-  '''
-    计时器修饰器
-  '''
-  @wraps(func)
-  def wrapper(*args, **kwargs):
-    begin_time = time.time()
-    ret = func(*args, **kwargs)
-    end_time = time.time()
-    print(f'Run Time: {end_time-begin_time} s')
-    return ret
-  return wrapper
+#---------------------- 其他 -------------------------
+#                      2026/1/13
 
 def utils_getDevice():
   '''
@@ -31,6 +21,22 @@ def utils_getDevice():
 def utils_setSeed(seed):
   torch.manual_seed(seed)
   np.random.seed(seed)
+
+#---------------------- 函数 -------------------------
+#                      2026/1/13
+
+def utils_timer(func):
+  '''
+    计时器修饰器
+  '''
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    begin_time = time.time()
+    ret = func(*args, **kwargs)
+    end_time = time.time()
+    print(f'Run Time: {end_time-begin_time} s')
+    return ret
+  return wrapper
 
 def utils_autoAssign(self):
   '''
@@ -52,6 +58,9 @@ def utils_autoAssign(self):
     if name not in local_vars:
       continue
     setattr(self, name, local_vars[name])
+
+#---------------------- 模型保存函数 -------------------------
+#                        2026/1/13
 
 def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str, save_path=None):
   '''
@@ -116,6 +125,16 @@ def utils_loadModel(dir_path, name, device):
   # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
   print(f"Model loaded from {path}")
   return checkpoint
+
+# TODO
+# class Utils_SavePath:
+#   '''
+#     管理 模型以及训练结果 的保存、格式
+#   '''
+#   def __init__(self):
+#     pass
+
+#   def 
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

@@ -11,7 +11,7 @@ class ENV_INFO(ABC):
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
       - 子类必须实现 `reset` `step` `render` `train` `eval`方法；
-      - 提供 _states_num、_actions_num、matrix
+      - 提供 _states_num、_actions_num、matrix、name
   '''
   def __init__(self):
     self._state = None    # 当前状态

@@ -255,6 +255,7 @@ class Env_CartPole(ENV_INFO):
   '''
   def __init__(self):
     super().__init__()
+    self.env = None
     self.env_train = gym.make('CartPole-v1', render_mode=None)
     self.env_eval = gym.make('CartPole-v1', render_mode='human')
     self.train()
@@ -306,23 +307,71 @@ class Env_CartPole(ENV_INFO):
     '''
     return self.env.render()
 
-# class Env_Pendulum(ENV_INFO):
-#   def __init__(self):
-#     self.env = gym.make('Pendulum-v0')
-#     self._states_num = 
-#     self._actions_num = 
+class Env_Pendulum(ENV_INFO):
+  '''
+    倒立摆环境，状态连续，动作连续；
+    控制摆杆使其竖直向上，角度越接近0，奖励越高（最大为0，越负表示表现越差）
+      state(dims): cos_theta sin_theta angular_velocity
+      action: torque (continuous value in [-2.0, 2.0])
+  '''
+  def __init__(self):
+    super().__init__()
+    self.env = None
+    self.env_train = gym.make('Pendulum-v1', render_mode=None)
+    self.env_eval = gym.make('Pendulum-v1', render_mode='human')
+    self.train()
+    self._states_num = self.env.observation_space.shape[0]
+    # self._actions_num = self.env.action_space.shape[0]
+    self._actions_num = 12
+    self.matrix = None
+    self.name = 'Pendulum'
 
-#   def train(self):
-#     pass
+    self.c = 4.0/(self._actions_num-1)
 
-#   def eval(self):
-#     pass
+  def train(self):
+    self.env = self.env_train
 
-#   def step(self):
-#     pass
+  def eval(self):
+    self.env = self.env_eval
 
-#   def reset(self):
-#     pass
+  def reset(self):
+    obs, info = self.env.reset()
+    self._state = obs.astype(np.float32)
+    self._done = False
+    self._info = {
+      'done': False,
+      'gym_info': info
+    }
+    return self._state, self._info.copy()
+
+  def step(self, action):
+    if self._done:
+      return self._state, 0.0, True, {'done': True, 'warning': 'env already done'}
+    
+    # Pendulum环境动作需要是数组形式
+    action = -2.0+self.c*action
+    # print(action)
+    if isinstance(action, (int, float)):
+      action = np.array([action], dtype=np.float32)
+    elif isinstance(action, list):
+      action = np.array(action, dtype=np.float32)
+    
+    obs, reward, terminated, truncated, info = self.env.step(action)
+    # Pendulum环境中，通常不会自然终止，但可能有最大步数限制
+    self._done = terminated or truncated
+    self._state = obs.astype(np.float32)
+    self._info = {
+      'done': self._done,
+      'terminated': terminated,
+      'truncated': truncated,
+      'gym_info': info,
+      'next_state': self._state,
+      'raw_reward': reward  # 保存原始奖励，Pendulum的奖励范围是[-16.27, 0]
+    }
+    return self._state, float(reward), self._done, self._info.copy()
+
+  def render(self):
+    return self.env.render()
 
 class Env_AimBall(ENV_INFO):
   '''
@@ -730,6 +779,22 @@ class Qnet(torch.nn.Module):
   def forward(self, state):
     state = F.relu(self.fc1(state))
     return self.fc3(state)
+
+class VAnet(torch.nn.Module):
+  '''
+    dueling DQN 用
+  '''
+  def __init__(self, state_dim, hidden_dim, action_dim):
+    super().__init__()
+    self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
+    self.fc_A = torch.nn.Linear(hidden_dim, action_dim)
+    self.fc_V = torch.nn.Linear(hidden_dim, 1)
+
+  def forward(self, X):
+    A = self.fc_A(F.relu(self.fc1(X)))
+    V = self.fc_V(F.relu(self.fc1(X)))
+    Q = V+A-A.mean(1).view(-1, 1)
+    return Q
 
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
