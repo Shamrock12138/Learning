@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Projects.Model.RL import *
 from Projects.Utils.RL_tools import *
 from Projects.Utils.tools import *
+from Projects.Utils.RL_Env import *
 
 device = utils_getDevice()
 working_path = r'F:\\GraduateStudent\\Code\\Git_Learning\\Knowledge\\ReinforcementLearning\\Learning\\'
@@ -31,7 +32,7 @@ agent = SAC_Discrete(env, env._states_num, 256, env._actions_num, 1e-3, 1e-2,
                      1e-2, -1, 0.005, 0.98, device)
 RL_name = agent.name
 
-train_episodes = 100
+train_episodes = 10
 model_save_path = working_path+RL_name+r'\\model\\'
 history_save_path = working_path+RL_name+r'\\history\\'
 split_string = '_'
