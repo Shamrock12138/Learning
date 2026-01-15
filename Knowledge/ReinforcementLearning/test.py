@@ -10,8 +10,8 @@ working_path = r'F:\\GraduateStudent\\Code\\Git_Learning\\Knowledge\\Reinforceme
 
 # env = Env_CliffWalking(height=5, width=5)
 # env = Env_FrozenLake()
-# env = Env_CartPole()
-env = Env_Pendulum()
+env = Env_CartPole()
+# env = Env_Pendulum()
 # env = Env_AimBall()
 # env = Env_AimBallDynamic(target_move_mode='uniform')
 env_name = env.name
@@ -23,11 +23,15 @@ env_name = env.name
 # agent = Q_Learning(env, 0.3, 0.1, 0.9)
 # agent = Dyna_Q(env, 0.6, 0.1, 0.9, 3)
 # agent = DQN(env, env._states_num, 256, env._actions_num, 2e-3, 0.98, 0.01, 30, device)
-agent = DoubleDQN(env, env._states_num, 256, env._actions_num, 2e-3, 0.98, 0.01, 30, device)
+# agent = DoubleDQN(env, env._states_num, 256, env._actions_num, 2e-3, 0.98, 0.01, 30, device)
 # agent = DuelingDQN(env, env._states_num, 256, env._actions_num, 2e-3, 0.98, 0.01, 30, device)
+# agent = REINFORCE(env, env._states_num, 256, env._actions_num, 1e-3, 0.98, device)
+# agent = AC(env, env._states_num, 128, env._actions_num, 1e-3, 1e-2, 0.98, device)
+agent = SAC_Discrete(env, env._states_num, 256, env._actions_num, 1e-3, 1e-2,
+                     1e-2, -1, 0.005, 0.98, device)
 RL_name = agent.name
 
-train_episodes = 300
+train_episodes = 100
 model_save_path = working_path+RL_name+r'\\model\\'
 history_save_path = working_path+RL_name+r'\\history\\'
 split_string = '_'

@@ -77,6 +77,7 @@ class DP_PolicyIteration(RL_Model):
       new_pi = self.policy_improvement()
       episodes -= 1
 
+
 class DP_ValueIteration(RL_Model):
   def __init__(self, env:ENV_INFO, theta, gamma):
     self.env = env
@@ -411,8 +412,8 @@ class DQN(RL_Model):
     super().__init__()
     utils_autoAssign(self)
 
-    self.q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
-    self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
+    self.q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
     self.replay_buffer = ReplayBuffer(1000)
     self.name = 'DQN'
@@ -556,8 +557,8 @@ class DoubleDQN(RL_Model):
     super().__init__()
     utils_autoAssign(self)
 
-    self.q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
-    self.target_q_net = Qnet(state_dim, hidden_dim, action_dim).to(device)
+    self.q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
     self.replay_buffer = ReplayBuffer(1000)
     self.name = 'Double_DQN'
@@ -754,6 +755,333 @@ class DuelingDQN(RL_Model):
         state = n_state
       self.history.append(episode)
 
+#---------------------- REINFORCE -------------------------
+#                        2026/1/14
+
+class REINFORCE(RL_Model):
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, device):
+    super().__init__()
+    utils_autoAssign(self)
+    self.policy_net = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr)
+    self.name = 'REINFORCE'
+    self.history = []
+
+  def take_action(self, state):
+    state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+    probs = self.policy_net(state)
+    action_dist = torch.distributions.Categorical(probs)
+    action = action_dist.sample()
+    return action.item()
+  
+  def update(self, transition_dict):
+    reward_list = transition_dict['rewards']
+    state_list = transition_dict['states']
+    action_list = transition_dict['actions']
+
+    G = 0
+    self.optimizer.zero_grad()
+    for i in reversed(range(len(reward_list))):
+      reward = reward_list[i]
+      state = torch.tensor(np.array([state_list[i]]), dtype=torch.float).to(self.device)
+      action = torch.tensor(np.array([action_list[i]])).view(-1, 1).to(self.device)
+      log_prob = torch.log(self.policy_net(state).gather(1, action))
+      G = self.gamma*G+reward
+      loss = -log_prob*G
+      loss.backward()
+    self.optimizer.step()
+
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory(self.history, self.name+' on '+self.env.name, 
+                      'Episodes', 'Returns', path)
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
+  def save_model(self, dir_path, name):
+    checkpoint = {
+      'policy_net_state': self.policy_net.state_dict(),
+      # 'target_q_net_state': self.target_q_net.state_dict(),
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    utils_saveModel(dir_path, name, checkpoint)
+
+  def load_model(self, dir_path, name):
+    checkpoint = utils_loadModel(dir_path, name, self.device)
+    self.policy_net.load_state_dict(checkpoint['policy_net_state'])
+    # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+
+  @utils_timer
+  def run(self, episodes=None):
+    self.history = train_on_policy(self.env, self, episodes)
+
+#---------------------- Actor-Critic -------------------------
+#                        2026/1/14
+
+class AC(RL_Model):
+  '''
+    Actor-Critic
+  '''
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, 
+               actor_lr, critic_lr, gamma, device):
+    super().__init__()
+    utils_autoAssign(self)
+    self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
+    self.critic = ValueNet(state_dim, hidden_dim).to(device)
+    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+    
+    self.name = 'Actor-Critic'
+    self.history = []
+
+  def take_action(self, state):
+    state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+    probs = self.actor(state)
+    action_dist = torch.distributions.Categorical(probs)
+    action = action_dist.sample()
+    return action.item()
+  
+  def update(self, transition):
+    states = torch.tensor(np.array(transition['states']), dtype=torch.float).to(self.device)
+    actions = torch.tensor(np.array(transition['actions'])).view(-1, 1).to(self.device)
+    rewards = torch.tensor(np.array(transition['rewards']), dtype=torch.float).view(-1, 1).to(self.device)
+    next_states = torch.tensor(np.array(transition['next_states']), dtype=torch.float).to(self.device)
+    dones = torch.tensor(np.array(transition['dones']), dtype=torch.float).view(-1, 1).to(self.device)
+
+    td_target = rewards+self.gamma*self.critic(next_states)*(1-dones)
+    td_delta = td_target-self.critic(states)  # A(st, at) = r+gamma*V(st+1)-V(st)
+    log_probs = torch.log(self.actor(states).gather(1, actions))
+    actor_loss = torch.mean(-log_probs*td_delta.detach()) # 策略梯度定理
+    critic_loss = torch.mean(F.mse_loss(self.critic(states), td_target.detach()))
+
+    self.actor_optimizer.zero_grad()
+    self.critic_optimizer.zero_grad()
+    actor_loss.backward()
+    critic_loss.backward()
+    self.actor_optimizer.step()
+    self.critic_optimizer.step()
+
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory(self.history, self.name+' on '+self.env.name, 
+                      'Episodes', 'Returns', path)
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
+  def save_model(self, dir_path, name):
+    checkpoint = {
+      'actor_state': self.actor.state_dict(),
+      'critic_state': self.critic.state_dict()
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    utils_saveModel(dir_path, name, checkpoint)
+
+  def load_model(self, dir_path, name):
+    checkpoint = utils_loadModel(dir_path, name, self.device)
+    self.actor.load_state_dict(checkpoint['actor_state'])
+    self.critic.load_state_dict(checkpoint['critic_state'])
+    # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+
+  @utils_timer
+  def run(self, episodes=None):
+    '''
+      params:
+        episodes - 
+          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
+    '''
+    self.history = train_on_policy(self.env, self, episodes)
+
+#---------------------- Soft Actor-Critic -------------------------
+#                        2026/1/15
+
+class SAC_Discrete(RL_Model):
+  '''
+    处理离散动作的SAC
+  '''
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, 
+               actor_lr, critic_lr, alpha_lr, target_entropy, tau,
+               gamma, device):
+    super().__init__()
+    utils_autoAssign(self)
+    self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
+    self.critic_1 = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.critic_2 = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_critic_1 = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_critic_2 = QNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_critic_1.load_state_dict(self.critic_1.state_dict())
+    self.target_critic_2.load_state_dict(self.critic_2.state_dict())
+    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), 
+                                            lr=actor_lr)
+    self.critic_1_optimizer = torch.optim.Adam(self.critic_1.parameters(), 
+                                               lr=critic_lr)
+    self.critic_2_optimizer = torch.optim.Adam(self.critic_2.parameters(), 
+                                               lr=critic_lr)
+    self.log_alpha = torch.tensor(np.log(0.01), dtype=torch.float)
+    self.log_alpha.requires_grad = True  # 可以对alpha求梯度
+    self.log_alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
+    
+    self.name = 'SAC_Discrete'
+    self.replay_buffer = ReplayBuffer(10000)
+
+  def take_action(self, state):
+    state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+    probs = self.actor(state)
+    action_dist = torch.distributions.Categorical(probs)
+    action = action_dist.sample()
+    return action.item()
+
+  # 计算目标Q值,直接用策略网络的输出概率进行期望计算
+  def calc_target(self, rewards, next_states, dones):
+    next_probs = self.actor(next_states)
+    next_log_probs = torch.log(next_probs + 1e-8)
+    entropy = -torch.sum(next_probs * next_log_probs, dim=1, keepdim=True)
+    q1_value = self.target_critic_1(next_states)
+    q2_value = self.target_critic_2(next_states)
+    min_qvalue = torch.sum(next_probs * torch.min(q1_value, q2_value),
+                            dim=1,
+                            keepdim=True)
+    next_value = min_qvalue + self.log_alpha.exp() * entropy
+    td_target = rewards + self.gamma * next_value * (1 - dones)
+    return td_target
+
+  def soft_update(self, net, target_net):
+    for param_target, param in zip(target_net.parameters(),
+                                    net.parameters()):
+      param_target.data.copy_(param_target.data * (1.0 - self.tau) +
+                              param.data * self.tau)
+
+  def update(self, transition_dict):
+    states = torch.tensor(np.array(transition_dict['states']),
+                          dtype=torch.float).to(self.device)
+    actions = torch.tensor(np.array(transition_dict['actions'])).view(-1, 1).to(
+        self.device)  # 动作不再是float类型
+    rewards = torch.tensor(np.array(transition_dict['rewards']),
+                            dtype=torch.float).view(-1, 1).to(self.device)
+    next_states = torch.tensor(np.array(transition_dict['next_states']),
+                                dtype=torch.float).to(self.device)
+    dones = torch.tensor(np.array(transition_dict['dones']),
+                          dtype=torch.float).view(-1, 1).to(self.device)
+
+    # 更新两个Q网络
+    td_target = self.calc_target(rewards, next_states, dones)
+    critic_1_q_values = self.critic_1(states).gather(1, actions)
+    critic_1_loss = torch.mean(
+        F.mse_loss(critic_1_q_values, td_target.detach()))
+    critic_2_q_values = self.critic_2(states).gather(1, actions)
+    critic_2_loss = torch.mean(
+        F.mse_loss(critic_2_q_values, td_target.detach()))
+    self.critic_1_optimizer.zero_grad()
+    critic_1_loss.backward()
+    self.critic_1_optimizer.step()
+    self.critic_2_optimizer.zero_grad()
+    critic_2_loss.backward()
+    self.critic_2_optimizer.step()
+
+    # 更新策略网络
+    probs = self.actor(states)
+    log_probs = torch.log(probs + 1e-8)
+    # 直接根据概率计算熵
+    entropy = -torch.sum(probs * log_probs, dim=1, keepdim=True)  #
+    q1_value = self.critic_1(states)
+    q2_value = self.critic_2(states)
+    min_qvalue = torch.sum(probs * torch.min(q1_value, q2_value),
+                            dim=1,
+                            keepdim=True)  # 直接根据概率计算期望
+    actor_loss = torch.mean(-self.log_alpha.exp() * entropy - min_qvalue)
+    self.actor_optimizer.zero_grad()
+    actor_loss.backward()
+    self.actor_optimizer.step()
+
+    # 更新alpha值
+    alpha_loss = torch.mean(
+        (entropy - self.target_entropy).detach() * self.log_alpha.exp())
+    self.log_alpha_optimizer.zero_grad()
+    alpha_loss.backward()
+    self.log_alpha_optimizer.step()
+
+    self.soft_update(self.critic_1, self.target_critic_1)
+    self.soft_update(self.critic_2, self.target_critic_2)
+
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory(self.history, self.name+' on '+self.env.name, 
+                      'Episodes', 'Returns', path)
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
+  def save_model(self, dir_path, name):
+    checkpoint = {
+      'actor_state': self.actor.state_dict(),
+      'critic_1_state': self.critic_1.state_dict(),
+      'critic_2_state': self.critic_2.state_dict(),
+      'target_critic_1_state': self.target_critic_1.state_dict(),
+      'target_critic_2_state': self.target_critic_2.state_dict()
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    utils_saveModel(dir_path, name, checkpoint)
+
+  def load_model(self, dir_path, name):
+    checkpoint = utils_loadModel(dir_path, name, self.device)
+    self.actor.load_state_dict(checkpoint['actor_state'])
+    self.critic_1.load_state_dict(checkpoint['critic_1_state'])
+    self.critic_2.load_state_dict(checkpoint['critic_2_state'])
+    self.target_critic_1.load_state_dict(checkpoint['target_critic_1_state'])
+    self.target_critic_2.load_state_dict(checkpoint['target_critic_2_state'])
+    # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+
+  @utils_timer
+  def run(self, episodes=None):
+    '''
+      params:
+        episodes - 
+          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
+    '''
+    self.history = train_off_policy(self.env, self, episodes, self.replay_buffer, 500, 64)
 
 
 #         ,--.                                                 ,--.     
