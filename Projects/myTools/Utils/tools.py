@@ -4,8 +4,9 @@
 
 from functools import wraps
 import numpy as np
-import time, torch, inspect, os
 import matplotlib.pyplot as plt
+
+import time, torch, inspect, os, json, collections, random
 
 #---------------------- 其他 -------------------------
 #                      2026/1/13
@@ -58,6 +59,13 @@ def utils_autoAssign(self):
     if name not in local_vars:
       continue
     setattr(self, name, local_vars[name])
+
+def utils_setAttr(self, d:dict):
+  '''
+    将 dict 中的 key, value 设为 self 的参数
+  '''
+  for key, value in d.items():
+    setattr(self, key, value)
 
 #---------------------- 模型保存函数 -------------------------
 #                        2026/1/13
@@ -125,6 +133,66 @@ def utils_loadModel(dir_path, name, device):
   # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
   print(f"Model loaded from {path}")
   return checkpoint
+
+#---------------------- 管理json格式参数函数 -------------------------
+#                        2026/1/22
+
+def utils_readParams(json_path:str, sub_name:str) -> dict:
+  '''
+    从 JSON 文件中读取指定顶层子配置块。
+    params:
+      json_path - json格式参数文件路径
+      sub_name - 要读取的顶层键名（如 "model", "env"）
+    returns:
+      dict - 配置子块
+  '''
+  with open(json_path, 'r') as f:
+    config = json.load(f)
+  if sub_name not in config:
+    raise KeyError(f"Key '{sub_name}' not found in {json_path}")
+  sub_config = config[sub_name]
+  return sub_config
+
+#---------------------- 实用工具函数 -------------------------
+#                        2026/1/23
+
+class utils_replayBuffer:
+  def __init__(self, capacity=1000):
+    self.buffer = collections.deque(maxlen=capacity)
+
+  def add(self, state, action, reward, next_state, done):
+    self.buffer.append((state, action, reward, next_state, done))
+
+  def sample(self, batch_size=None):
+    '''
+      从 buffer 中采样数据,数量为 batch_size ，如果 batch_size == None，则全部取出 
+      return:  
+        transitions_dict - {
+        'states': (state1, state2 ...),
+        'actions': ...,
+        'next_states': ...,
+        'rewards': ...,
+        'dones': ...
+        }
+      example:  
+        state, action, reward, next_state, done = zip(*transitions)
+        np.array(state), action, reward, np.array(next_state), done
+    '''
+    if batch_size is None:
+      batch_size = self.size()
+    transitions = random.sample(self.buffer, batch_size)
+    state, action, reward, next_state, done = zip(*transitions)
+    transitions_dict = {
+      'states': np.array(state),
+      'actions': action,
+      'next_states': np.array(next_state),
+      'rewards': reward,
+      'dones': done
+    }
+    return transitions_dict, np.array(state), action, reward, np.array(next_state), done
+
+  def size(self):
+    return len(self.buffer)
 
 # TODO
 # class Utils_SavePath:
