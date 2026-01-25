@@ -17,10 +17,10 @@ import copy
 
 class EQL(MORL_ModelConfig):
   def __init__(self, env:MORL_EnvConfig, model:EQL_Network, buffer:utils_prioritReplayBuffer, 
-               args_path, device):
+               agent_params:dict, device):
     super().__init__()
     utils_autoAssign(self)
-    utils_setAttr(self, utils_readParams(args_path, 'model'))
+    utils_setAttr(self, agent_params)
 
     self.model = model               # 当前网络
     self.target_model = copy.deepcopy(model) # 目标网络
@@ -32,9 +32,6 @@ class EQL(MORL_ModelConfig):
     self.beta_expbase = float(np.power(self.tau*(self.beta_uplim-self.beta), 1./self.episode_num))
     self.beta_delta = self.beta_expbase / self.tau
 
-    # self.trans_mem = deque()
-    # self.trans = namedtuple('trans', ['s', 'a', 'n_s', 'r', 'd'])
-    # self.priority_mem = deque()
     self.trans = buffer.Transition
 
     if self.optimizer == 'Adam':
@@ -60,7 +57,7 @@ class EQL(MORL_ModelConfig):
     if self.is_train == 1:
       # 检查是否强制探索（经验池未满或随机探索）
       force_explore = (
-        len(self.buffer) < self.batch_size or 
+        self.buffer.size() < self.batch_size or 
         torch.rand(1, device=self.device).item() < self.epsilon
       )
       if force_explore:
@@ -87,7 +84,7 @@ class EQL(MORL_ModelConfig):
       scalar_q = torch.dot(preference, current_q)   # q = wTQ
       scalar_reward = torch.dot(preference, reward) # r = wTR
 
-      if not done:
+      if done != 0:
         next_q, _ = self.model(
           next_state.unsqueeze(0),
           preference.unsqueeze(0)
@@ -100,11 +97,11 @@ class EQL(MORL_ModelConfig):
         self.w_kept = None
         # 探索率衰减
         if self.epsilon_decay:
-          self.epsilon = max(self.epsilon_min, self.epsilon*self.epsilon_decay)
+          self.epsilon -= self.epsilon_delta
         # 同伦优化
-        if self.homotopy:
-          self.beta += self.beta_delta    # 同伦优化，实现beta的指数增长
-          self.beta_delta = (self.beta-self.beta_init)*self.beta_expbase+self.beta_init-self.beta
+        # if self.homotopy:
+        self.beta += self.beta_delta    # 同伦优化，实现beta的指数增长
+        self.beta_delta = (self.beta-self.beta_init)*self.beta_expbase+self.beta_init-self.beta
       priority = torch.abs(td_error)+1e-5
     self.buffer.add(priority=priority, state=state, action=action, next_state=next_state, 
                     reward=reward, done=done)
@@ -134,14 +131,19 @@ class EQL(MORL_ModelConfig):
     reward_size = self.model.reward_size
 
     self.update_count += 1
-    minibatch = self.sample(self.batch_size)
-    
+    minibatch, _ = self.sample(self.batch_size)
+
     batchify = lambda x: list(x)*self.weight_num
-    state_batch = batchify([exp['state'].unsqueeze(0) for exp in minibatch])
-    action_batch = batchify([exp['action'] for exp in minibatch])
-    reward_batch = batchify([exp['reward'].unsqueeze(0) for exp in minibatch])
-    next_state_batch = batchify([exp['next_state'].unsqueeze(0) for exp in minibatch])
-    terminal_batch = batchify([exp['terminal'] for exp in minibatch])
+    # state_batch = batchify([exp.state.unsqueeze(0) for exp in minibatch])
+    # action_batch = batchify([torch.tensor(exp.action, dtype=torch.long, device=self.device) for exp in minibatch])
+    # reward_batch = batchify([exp.reward for exp in minibatch])
+    # next_state_batch = batchify([exp.next_state.unsqueeze(0) for exp in minibatch])
+    # terminal_batch = batchify([exp.done for exp in minibatch])
+    state_batch = batchify(map(lambda x: x.state.unsqueeze(0), minibatch))
+    action_batch = batchify(map(lambda x: torch.tensor([x.action], dtype=torch.long, device=self.device), minibatch))
+    reward_batch = batchify(map(lambda x: x.reward.unsqueeze(0), minibatch))  # 关键：保持奖励维度
+    next_state_batch = batchify(map(lambda x: x.next_state.unsqueeze(0), minibatch))
+    terminal_batch = batchify(map(lambda x: torch.tensor([x.done], dtype=torch.bool, device=self.device), minibatch))  # 添加 unsqueeze 保持维度
 
     w_batch = np.random.randn(self.weight_num, reward_size)
     w_batch = np.abs(w_batch)/np.linalg.norm(w_batch, ord=1, axis=1, keepdims=True)
@@ -176,6 +178,7 @@ class EQL(MORL_ModelConfig):
       target_values = torch.zeros(self.batch_size*self.weight_num, reward_size,
                                   device=self.device, dtype=torch.float32)
       target_values[nontml_mask] = self.gamma*HQ[nontml_mask]
+      # print(target_values.shape, torch.cat(reward_batch, dim=0).shape)
       target_values += torch.cat(reward_batch, dim=0)
       # [batch_size * weight_num, reward_size]
 
@@ -194,8 +197,8 @@ class EQL(MORL_ModelConfig):
     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)  # More efficient gradient clipping
     self.optimizer.step()
 
-    if self.update_count % self.update_freq == 0:
-      self.load_state_dict(self.model.state_dict())
+    # if self.update_count % self.update_freq == 0:
+    #   self.load_state_dict(self.model.state_dict())
 
     return loss.item()
 
@@ -265,25 +268,36 @@ class EQL(MORL_ModelConfig):
     return np.clip(x + delta, 0, 1)
 
   @utils_timer
-  def run(self, episode_num, probe):
+  def train(self, episodes_num, probe):
     '''
-      开始训练
-      
       params:
-        episode_num - 训练次数
+        episodes_num - 训练次数
         probe - 偏好，例：[0.5, 0.5]
     '''
-    for episode in tqdm(range(episode_num), desc=self.name+'Iteration'):
+    loss_history = []
+    for episode in tqdm(range(episodes_num), desc=self.name+' Iteration'):
       done = False
       tot_reward, gamma = 0, self.gamma
+      loss, cnt = 0, 0
       state, _ = self.env.reset()
       while not done:
         action = self.take_action(state)
-        next_state, reward, done, _ = self.env.step(action)
-        self.buffer.memorize(state, action, next_state, reward, done)
-        tot_reward += (probe.dot(reward))*gamma
-        gamma *= self.gamma
+        next_state, reward, terminated, truncated, _ = self.env.step(action)
+        done = terminated or truncated
+        # print(reward.size)
+        self.memorize(state, action, next_state, reward, float(done))
+        if self.buffer.size() > self.batch_size:
+          loss += self.update()
+        tot_reward += (probe.cpu().numpy().dot(reward))*np.power(self.gamma, cnt)
+        cnt += 1
+        if cnt > 100:
+          done = True
+          self.reset()
         state = next_state
+        # print('loss: ', loss)
+      loss_history.append(loss)
+    return loss_history
+      
 
 
 

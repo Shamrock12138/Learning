@@ -162,13 +162,13 @@ class utils_prioritReplayBuffer:
   '''
     带优先级的经验回放池
   '''
-  def __init__(self, capacity, transition_type, alpha:float=0.6, beta:float=0.4,
+  def __init__(self, capacity, transition_type:tuple, alpha:float=0.6, beta:float=0.4,
                beta_increment:float=0.001):
     '''
       params:
         capacity - 缓冲区最大容量
         transition_type - 用于存储经验的命名元组类型及属性
-          (如 {'state', 'action', 'reward', 'next_state', 'done'} )
+          (如 ('state', 'action', 'reward', 'next_state', 'done') )
         alpha - 优先级指数，控制采样策略 (0=均匀采样，1=完全按优先级)
         beta - 重要性采样权重参数，用于纠正偏差
         beta_increment - beta的增量（每次采样后增加）

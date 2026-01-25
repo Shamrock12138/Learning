@@ -64,7 +64,7 @@ class MORL_ModelConfig(ABC):
     为各类 MORL 算法提供统一的外部调用接口。
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
-      - 子类必须实现 `run` `take_action`方法，作为模型的训练入口
+      - 子类必须实现 `train` `take_action`方法，作为模型的训练入口
       - 子类建议实现 show_history 方法，作为训练过程的展示
       - 子类建议实现 render 方法，作为测试过程的展示
       - 子类建议实现 save_model, load_model 方法，作为保存加载模型
@@ -73,7 +73,7 @@ class MORL_ModelConfig(ABC):
     super().__init__()
 
   def __call__(self, *input, **kwds):
-    return self.run(*input, **kwds)
+    return self.train(*input, **kwds)
   
   @abstractmethod
   def take_action(self, state):
@@ -107,9 +107,9 @@ class MORL_ModelConfig(ABC):
     pass
 
   @abstractmethod
-  def run(self, *input, **kwds):
+  def train(self, *input, **kwds):
     '''
-      模型程序入口
+      开始训练
     '''
     pass
 

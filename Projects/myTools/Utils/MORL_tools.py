@@ -5,8 +5,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from myTools.Utils.tools import *
+from myTools.Utils.MORL_config import *
 
 #---------------------- 网络结构 -------------------------
 #                      2026/1/22
@@ -49,7 +51,7 @@ class EQL_Network(torch.nn.Module):
     # [w_num * s_num * action_size * w_num, reward_size]
 
     inner_products = torch.einsum('bi,bi->b', extended_Q, extended_w)
-    inner_products_grouped = inner_products.view(w_num*s_num, self.actions_size*w_num)
+    inner_products_grouped = inner_products.view(w_num*s_num, self.action_size*w_num)
     # [w_num * s_num, action_size * w_num]
 
     max_indices = inner_products_grouped.argmax(dim=1)  # [w_num * s_num]
@@ -82,6 +84,23 @@ class EQL_Network(torch.nn.Module):
     hq = self.H(q.detach().view(-1, self.reward_size), preference, s_num, w_num)
 
     return hq, q
+
+#---------------------- Trainer -------------------------
+#                      2026/1/25
+
+# class MORL_Trainer:
+#   def __init__(self, agent:MORL_ModelConfig, params):
+#     utils_setAttr(self, params)
+#     self.agent = agent
+
+#   def train(self):
+#     '''
+#       开始训练，
+#     '''
+#     with tqdm(total=int(self.episodes_num), desc=self.agent.name+' Iteration') as pbar:
+      
+    
+  
 
 if __name__ == '__main__':
   a = torch.arange(2*3)
