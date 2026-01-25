@@ -3,9 +3,15 @@
 #                            shamrock
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-# TODO
-# class Utils_Config_
+# @dataclass
+# class Transition_Type:
+#   '''
+#     经验数据类
+#   '''
+
+
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

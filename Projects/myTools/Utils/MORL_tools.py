@@ -61,7 +61,7 @@ class EQL_Network(torch.nn.Module):
 
     return HQ.view(-1, self.reward_size)
 
-  def forward(self, state, preference, s_num, w_num):
+  def forward(self, state, preference, w_num=1):
     '''
       params:
         state - [B, state_size]
@@ -74,6 +74,7 @@ class EQL_Network(torch.nn.Module):
         hq - [s_num, w_num, reward_size]
           HQ(s1, w1, r1) = argQmax( <w1T,Q(s1, w', a', r1)> )
     '''
+    s_num = int(preference.size(0)/w_num)
     x = torch.cat((state, preference), dim=1)
     features = self.feature_net(x)
     q = self.q_head(features)

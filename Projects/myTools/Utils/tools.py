@@ -5,8 +5,10 @@
 from functools import wraps
 import numpy as np
 import matplotlib.pyplot as plt
+from collections import deque, namedtuple
+from typing import Dict, List, Optional, Tuple, Any
 
-import time, torch, inspect, os, json, collections, random
+import time, torch, inspect, os, json, random
 
 #---------------------- 其他 -------------------------
 #                      2026/1/13
@@ -156,17 +158,52 @@ def utils_readParams(json_path:str, sub_name:str) -> dict:
 #---------------------- 实用工具函数 -------------------------
 #                        2026/1/23
 
-class utils_replayBuffer:
-  def __init__(self, capacity=1000):
-    self.buffer = collections.deque(maxlen=capacity)
+class utils_prioritReplayBuffer:
+  '''
+    带优先级的经验回放池
+  '''
+  def __init__(self, capacity, transition_type, alpha:float=0.6, beta:float=0.4,
+               beta_increment:float=0.001):
+    '''
+      params:
+        capacity - 缓冲区最大容量
+        transition_type - 用于存储经验的命名元组类型及属性
+          (如 {'state', 'action', 'reward', 'next_state', 'done'} )
+        alpha - 优先级指数，控制采样策略 (0=均匀采样，1=完全按优先级)
+        beta - 重要性采样权重参数，用于纠正偏差
+        beta_increment - beta的增量（每次采样后增加）
+    '''
+    utils_autoAssign(self)
+    self.Transition = namedtuple('Transition', field_names=transition_type)
+    self.buffer = deque(maxlen=capacity)
+    self.priorities = deque(maxlen=capacity)
+    self.max_priority = 1.0
 
-  def add(self, state, action, reward, next_state, done):
-    self.buffer.append((state, action, reward, next_state, done))
+  def add(self, priority=None, **kwargs) -> None:
+    '''
+      params:
+        **kwargs - 必须包含transition_type定义的所有字段
+          例如: (state, action, reward, next_state, done)
+        priority - 初始优先级，如果为None则使用当前最大优先级
+    '''
+    missing_fields = [field for field in self.Transition._fields if field not in kwargs]
+    if missing_fields:
+      raise ValueError(f"Missing fields: {missing_fields}")
+    transition = self.Transition(**{field: kwargs[field] for field in self.Transition._fields})
+    
+    self.buffer.append(transition)
 
-  def sample(self, batch_size=None):
+    if priority is None:
+      priority = self.max_priority
+    elif priority > self.max_priority:
+      priority = self.max_priority
+    self.priorities.append(priority)
+
+  def sample(self, batch_size):
     '''
       从 buffer 中采样数据,数量为 batch_size ，如果 batch_size == None，则全部取出 
       return:  
+        samples - [(s1, a1, r1, n_s1, d1), ...]
         transitions_dict - {
         'states': (state1, state2 ...),
         'actions': ...,
@@ -178,18 +215,19 @@ class utils_replayBuffer:
         state, action, reward, next_state, done = zip(*transitions)
         np.array(state), action, reward, np.array(next_state), done
     '''
-    if batch_size is None:
-      batch_size = self.size()
-    transitions = random.sample(self.buffer, batch_size)
-    state, action, reward, next_state, done = zip(*transitions)
-    transitions_dict = {
-      'states': np.array(state),
-      'actions': action,
-      'next_states': np.array(next_state),
-      'rewards': reward,
-      'dones': done
-    }
-    return transitions_dict, np.array(state), action, reward, np.array(next_state), done
+    priority_array = np.array(self.priorities, dtype=np.float32)
+    probs = priority_array**self.alpha
+    probs /= probs.sum()+1e-9
+
+    indices = np.random.choice(len(self.buffer), batch_size, replace=False, p=probs)
+    samples = [self.buffer[i] for i in indices]
+
+    transitions_dict = {}
+    for field in self.Transition._fields:
+      field_values = [getattr(sample, field) for sample in samples]
+      transitions_dict[field+'s'] = field_values
+
+    return samples, transitions_dict
 
   def size(self):
     return len(self.buffer)
@@ -203,6 +241,20 @@ class utils_replayBuffer:
 #     pass
 
 #   def 
+
+if __name__ == '__main__':
+  trans = ('state', 'action', 'reward', 'next_state', 'done')
+  buffer = utils_prioritReplayBuffer(capacity=100, transition_type=trans)
+  for i in range(12):
+    buffer.add(
+        priority=i*0.1,
+        state=i*0.1,
+        action=i%2,
+        reward=i*0.5,
+        next_state=(i+1)*0.1,
+        done=(i==9)
+    )
+  print(buffer.sample(1))
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

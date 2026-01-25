@@ -19,10 +19,8 @@ class MORL_EnvConfig(ABC):
     self._states_size = None    # 状态尺寸（几维state）
     self._actions_size = None   # 动作尺寸（几维action）
     self._rewards_size = None   # 奖励尺寸（几维reward）
-    # self._weights_num = None    # 偏好数
 
     self._info = {}       # 附加信息
-    self.matrix = None    # 例如MDP提供的矩阵
   
   @abstractmethod
   def train(self):
