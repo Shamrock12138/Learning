@@ -134,11 +134,6 @@ class EQL(MORL_ModelConfig):
     minibatch, _ = self.sample(self.batch_size)
 
     batchify = lambda x: list(x)*self.weight_num
-    # state_batch = batchify([exp.state.unsqueeze(0) for exp in minibatch])
-    # action_batch = batchify([torch.tensor(exp.action, dtype=torch.long, device=self.device) for exp in minibatch])
-    # reward_batch = batchify([exp.reward for exp in minibatch])
-    # next_state_batch = batchify([exp.next_state.unsqueeze(0) for exp in minibatch])
-    # terminal_batch = batchify([exp.done for exp in minibatch])
     state_batch = batchify(map(lambda x: x.state.unsqueeze(0), minibatch))
     action_batch = batchify(map(lambda x: torch.tensor([x.action], dtype=torch.long, device=self.device), minibatch))
     reward_batch = batchify(map(lambda x: x.reward.unsqueeze(0), minibatch))  # 关键：保持奖励维度
@@ -272,19 +267,19 @@ class EQL(MORL_ModelConfig):
     '''
       params:
         episodes_num - 训练次数
-        probe - 偏好，例：[0.5, 0.5]
+        probe - 用户想要的偏好，例：[0.5, 0.5]
     '''
     loss_history = []
+    reward_history = []
     for episode in tqdm(range(episodes_num), desc=self.name+' Iteration'):
       done = False
-      tot_reward, gamma = 0, self.gamma
+      tot_reward = 0
       loss, cnt = 0, 0
       state, _ = self.env.reset()
       while not done:
         action = self.take_action(state)
         next_state, reward, terminated, truncated, _ = self.env.step(action)
         done = terminated or truncated
-        # print(reward.size)
         self.memorize(state, action, next_state, reward, float(done))
         if self.buffer.size() > self.batch_size:
           loss += self.update()
@@ -294,9 +289,9 @@ class EQL(MORL_ModelConfig):
           done = True
           self.reset()
         state = next_state
-        # print('loss: ', loss)
+      reward_history.append(tot_reward)
       loss_history.append(loss)
-    return loss_history
+    return loss_history, reward_history
       
 
 

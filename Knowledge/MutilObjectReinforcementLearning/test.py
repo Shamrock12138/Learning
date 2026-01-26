@@ -21,5 +21,6 @@ buffer = utils_prioritReplayBuffer(
 
 agent = EQL(env, model, buffer, agent_params, device)
 probe = torch.tensor([0.8, 0.2], dtype=torch.float32, device=device)
-history = agent(trainer_params['episodes_num'], probe)
-utils_showHistory(history, 'EQL', 'episodes', 'loss')
+loss_history, reward_history = agent(trainer_params['episodes_num'], probe)
+utils_showHistory([loss_history, reward_history], ['loss', 'reward'], 'EQL', 'episodes', 'loss')
+

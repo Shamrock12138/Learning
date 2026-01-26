@@ -72,20 +72,25 @@ def utils_setAttr(self, d:dict):
 #---------------------- 模型保存函数 -------------------------
 #                        2026/1/13
 
-def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str, save_path=None):
+def utils_showHistory(histories:list, labels, title:str, x_lable:str, y_lable:str, save_path=None):
   '''
     显示 history 的曲线图，x轴y轴为 x_lable, y_lable，标题为 title
       params:
-        history - 列表
+        histories - 列表的列表
+        labels - 每个历史数据序列的标签
         title, x_lable, y_lable - 字符串
         save_path - 保存路径，默认None不保存
   '''
-  episodes_list = list(range(len(history)))
-  plt.plot(episodes_list, history)
+  episodes_list = list(range(len(histories[0])))
+
+  for i, history in enumerate(histories):
+    plt.plot(episodes_list[:len(history)], history, label=labels[i])
+
   plt.xlabel(x_lable)
   plt.ylabel(y_lable)
   plt.title(title)
-  plt.grid(True)  # 增强可读性
+  plt.legend()        # 显示图例
+  plt.grid(True)      # 增强可读性
   plt.tight_layout()  # 防止标签被裁剪
 
   if save_path:
