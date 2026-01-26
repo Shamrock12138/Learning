@@ -7,6 +7,14 @@ import os, argparse, sys
 from datetime import datetime
 from pathlib import Path
 
+'''
+  合并操作：
+    git fetch
+    git switch [target]
+    git merge [source]
+    git push origin [target]
+'''
+
 #----------------- 要提交的文件 ----------------
 
 submit_files = [
