@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import time, torch, inspect, os, json, random
 
+from myTools.Utils.config import *
+
 #---------------------- 其他 -------------------------
 #                      2026/1/13
 
@@ -163,6 +165,37 @@ def utils_readParams(json_path:str, sub_name:str) -> dict:
 #---------------------- 实用工具函数 -------------------------
 #                        2026/1/23
 
+class utils_ReplayBuffer:
+  '''
+    普通 Replay Buffer
+  '''
+  def __init__(self, capacity):
+    self.buffer = deque(maxlen=capacity)
+
+  def add_trajectory(self, trajectory:Trajectory):
+    self.buffer.append(trajectory)
+
+  def sample(self, batch_size):
+    batch = dict(states=[], actions=[], next_states=[], rewards=[], dones=[])
+    for _ in range(batch_size):
+      traj = random.sample(self.buffer, 1)[0]
+      step_state = np.random.randint(len(traj))
+      batch['states'].append(traj.states[step_state])
+      batch['next_states'].append(traj.states[step_state+1])
+      batch['actions'].append(traj.actions[step_state])
+      batch['rewards'].append(traj.rewards[step_state])
+      batch['dones'].append(traj.dones[step_state])
+    batch['states'] = np.array(batch['states'])
+    batch['next_states'] = np.array(batch['next_states'])
+    batch['actions'] = np.array(batch['actions'])
+    return batch
+
+  def __len__(self):
+    '''
+      buffer 中的轨迹数，而非样本数
+    '''
+    return len(self.buffer)
+
 class utils_prioritReplayBuffer:
   '''
     带优先级的经验回放池
@@ -237,15 +270,53 @@ class utils_prioritReplayBuffer:
   def size(self):
     return len(self.buffer)
 
-# TODO
-# class Utils_SavePath:
-#   '''
-#     管理 模型以及训练结果 的保存、格式
-#   '''
-#   def __init__(self):
-#     pass
+class utils_ReplayBuffer_HER(utils_ReplayBuffer):
+  '''
+    带 HER 的 ReplayBuffer，其中 state 包含两部分：[state, goal]
+  '''
+  def __init__(self, capacity):
+    super().__init__(capacity=capacity)
+  
+  def _HER(self, new_goal, state, action, reward, next_state, done):
+    '''
+      将 (state, action, reward, next_state, done) 通过设置 new_goal 的方式，
+      得到新轨迹 (state, action, reward', next_state, done')
+    '''
+    dis = np.linalg.norm(next_state[:2]-new_goal)
+    reward = -1.0 if dis > 0.15 else 0
+    done = False if dis > 0.15 else True
+    state = np.hstack((state[:2], new_goal))
+    next_state = np.hstack((next_state[:2], new_goal))
+    return state, action, reward, next_state, done
 
-#   def 
+  def sample(self, batch_size, her_ratio=0.8):
+    batch = dict(states=[], actions=[], next_states=[], rewards=[], dones=[])
+    for _ in range(batch_size):
+      traj = random.sample(self.buffer, 1)[0]
+      step_state = np.random.randint(len(traj))
+      state = traj.states[step_state]
+      next_state = traj.states[step_state + 1]
+      action = traj.actions[step_state]
+      reward = traj.rewards[step_state]
+      done = traj.dones[step_state]
+
+      if np.random.uniform() <= her_ratio:
+        # 使用HER算法的future方案设置目标
+        step_goal = np.random.randint(step_state+1, len(traj)+1)
+        goal = traj.states[step_goal][:2]
+
+        state, action, reward, next_state, done = self._HER(goal, state, action, reward, next_state, done)
+
+      batch['states'].append(state)
+      batch['next_states'].append(next_state)
+      batch['actions'].append(action)
+      batch['rewards'].append(reward)
+      batch['dones'].append(done)
+
+    batch['states'] = np.array(batch['states'])
+    batch['next_states'] = np.array(batch['next_states'])
+    batch['actions'] = np.array(batch['actions'])
+    return batch
 
 if __name__ == '__main__':
   trans = ('state', 'action', 'reward', 'next_state', 'done')

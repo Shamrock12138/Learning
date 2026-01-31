@@ -926,6 +926,121 @@ class AC(RL_Model):
 # TODO
 # class TRPO(RL_Model):
 
+#----------------------    DDPG    -------------------------
+#                        2026/1/28
+
+class DDPG(RL_Model):
+  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim,
+               action_bound, sigma, actor_lr, critic_lr,
+               tau, gamma, device):
+    super().__init__()
+    utils_autoAssign(self)
+
+    self.actor = DDPG_PolicyNet(state_dim, hidden_dim, action_dim, action_bound).to(device)
+    self.critic = DDPG_QValueNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_actor = DDPG_PolicyNet(state_dim, hidden_dim, action_dim, action_bound).to(device)
+    self.target_critic = DDPG_QValueNet(state_dim, hidden_dim, action_dim).to(device)
+    self.target_critic.load_state_dict(self.critic.state_dict())
+    self.target_actor.load_state_dict(self.actor.state_dict())
+    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+
+    self.name = 'DDPG'
+
+  def take_action(self, state):
+    state = torch.tensor(np.array(state), dtype=torch.float).to(self.device)
+    action = self.actor(state).item()
+    action += self.sigma*np.random.randn(self.action_dim) # 引入噪音
+    return action
+  
+  def soft_update(self, net, target_net):
+    '''
+      缓慢更新目标网络
+    '''
+    for param_target, param in zip(target_net.parameters(), net.parameters()):
+      param_target.data.copy_(param_target.data*(1.0-self.tau)+param.data*self.tau)
+
+  def update(self, transition):
+    states = torch.tensor(np.array(transition['states']), dtype=torch.float).to(self.device)
+    actions = torch.tensor(np.array(transition['actions']), dtype=torch.float).view(-1, 1).to(self.device)
+    rewards = torch.tensor(np.array(transition['rewards']), dtype=torch.float).view(-1, 1).to(self.device)
+    next_states = torch.tensor(np.array(transition['next_states']), dtype=torch.float).to(self.device)
+    dones = torch.tensor(np.array(transition['dones']), dtype=torch.float).view(-1, 1).to(self.device)
+      
+    next_q_values = self.target_critic(next_states, self.target_actor(next_states))
+    q_targets = rewards+self.gamma*next_q_values*(1-dones)
+    critic_loss = torch.mean(F.mse_loss(self.critic(states, actions), q_targets))
+    self.critic_optimizer.zero_grad()
+    critic_loss.backward()
+    self.critic_optimizer.step()
+
+    actor_loss = -torch.mean(self.critic(states, self.actor(states)))
+    self.actor_optimizer.zero_grad()
+    actor_loss.backward()
+    self.actor_optimizer.step()
+
+    self.soft_update(self.actor, self.target_actor)
+    self.soft_update(self.critic, self.target_critic)
+
+  def show_history(self, save_dir=None, name=None):
+    path = save_dir+name if save_dir and name else None
+    utils_showHistory([self.history], self.name, self.name+' on '+self.env.name, 
+                      'Episodes', 'Returns', path)
+
+  def render(self, times:int=1):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
+
+  def save_model(self, dir_path, name):
+    checkpoint = {
+      'actor_state': self.target_actor.state_dict(),
+      'critic_state': self.target_critic.state_dict()
+      # 'optimizer_state': self.optimizer.state_dict(),
+    }
+    utils_saveModel(dir_path, name, checkpoint)
+
+  def load_model(self, dir_path, name):
+    checkpoint = utils_loadModel(dir_path, name, self.device)
+    self.actor.load_state_dict(checkpoint['actor_state'])
+    self.target_actor.load_state_dict(checkpoint['actor_state'])
+    self.critic.load_state_dict(checkpoint['critic_state'])
+    self.target_critic.load_state_dict(checkpoint['critic_state'])
+    # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+
+  @utils_timer
+  def run(self, buffer:utils_ReplayBuffer, minimal_size, batch_size, n_train, episodes):
+    self.history = []
+    with tqdm(total=episodes, desc='Iteration') as pbar:
+      for episode in range(episodes):
+        total_reward = 0
+        state, _ = self.env.reset()
+        traj = Trajectory(state)
+        done = False
+        while not done:
+          action = self.take_action(state)
+          state, reward, done, _ = self.env.step(action)
+          total_reward += reward
+          traj.store_step(state, action, reward, done)
+        buffer.add_trajectory(traj)
+        self.history.append(total_reward)
+        if len(buffer) >= minimal_size:
+          for _ in range(n_train):
+            transition_dict = buffer.sample(batch_size)
+            self.update(transition_dict)
+        pbar.update(1)
 
 #---------------------- Soft Actor-Critic -------------------------
 #                        2026/1/15

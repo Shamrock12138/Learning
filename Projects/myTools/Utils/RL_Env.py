@@ -317,12 +317,11 @@ class Env_Pendulum(ENV_INFO):
     self.env_eval = gym.make('Pendulum-v1', render_mode='human')
     self.train()
     self._states_num = self.env.observation_space.shape[0]
-    # self._actions_num = self.env.action_space.shape[0]
-    self._actions_num = 12
-    self.matrix = None
+    self._actions_num = self.env.action_space.shape[0]
+    # self._actions_num = 12
     self.name = 'Pendulum'
 
-    self.c = 4.0/(self._actions_num-1)
+    # self.c = 4.0/(self._actions_num-1)
 
   def train(self):
     self.env = self.env_train
@@ -345,12 +344,13 @@ class Env_Pendulum(ENV_INFO):
       return self._state, 0.0, True, {'done': True, 'warning': 'env already done'}
     
     # Pendulum环境动作需要是数组形式
-    action = -2.0+self.c*action
+    # action = -2.0+self.c*action
     # print(action)
     if isinstance(action, (int, float)):
       action = np.array([action], dtype=np.float32)
     elif isinstance(action, list):
       action = np.array(action, dtype=np.float32)
+    action = np.clip(action, -2.0, 2.0)
     
     obs, reward, terminated, truncated, info = self.env.step(action)
     # Pendulum环境中，通常不会自然终止，但可能有最大步数限制
@@ -362,7 +362,7 @@ class Env_Pendulum(ENV_INFO):
       'truncated': truncated,
       'gym_info': info,
       'next_state': self._state,
-      'raw_reward': reward  # 保存原始奖励，Pendulum的奖励范围是[-16.27, 0]
+      'raw_reward': float(reward)  # 保存原始奖励，Pendulum的奖励范围是[-16.27, 0]
     }
     return self._state, float(reward), self._done, self._info.copy()
 

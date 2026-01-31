@@ -13,7 +13,7 @@ from collections import namedtuple, deque
 import copy
 
 #---------------------- Envelope Q Learning -------------------------
-#                        2026/1/22
+#                            2026/1/22
 
 class EQL(MORL_ModelConfig):
   def __init__(self, env:MORL_EnvConfig, model:EQL_Network, buffer:utils_prioritReplayBuffer, 
@@ -292,9 +292,6 @@ class EQL(MORL_ModelConfig):
       reward_history.append(tot_reward)
       loss_history.append(loss)
     return loss_history, reward_history
-      
-
-
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

@@ -10,7 +10,27 @@ from tqdm import tqdm
 from myTools.Utils.tools import *
 from myTools.Utils.MORL_config import *
 
-#---------------------- 网络结构 -------------------------
+#---------------------- 其他 -------------------------
+#                      2026/1/27
+
+# def MRTools_GetRandomWeights(shape, device):
+#   '''
+#     生成随机权重向量或矩阵，并进行归一化
+
+#     params:
+#       shape - 权重形状，可以是单个整数或元组
+#         整数: 生成向量 (n,)
+#         元组: 生成矩阵 (n, m)
+      
+#   '''
+
+#   weights = torch.randn(*shape, device=device)
+#   weights = torch.abs(weights)
+#   norm = torch.norm(weights, p=1, dim=1, keepdim=True)
+#   weights = weights/norm
+#   return weights
+
+#---------------------- EQL相关 -------------------------
 #                      2026/1/22
 
 class EQL_Network(torch.nn.Module):
