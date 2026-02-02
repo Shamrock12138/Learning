@@ -30,7 +30,7 @@ from myTools.Utils.MORL_config import *
 #   weights = weights/norm
 #   return weights
 
-#---------------------- EQL相关 -------------------------
+#---------------------- Envelope Q Learning 相关 -------------------------
 #                      2026/1/22
 
 class EQL_Network(torch.nn.Module):
@@ -104,6 +104,63 @@ class EQL_Network(torch.nn.Module):
     hq = self.H(q.detach().view(-1, self.reward_size), preference, s_num, w_num)
 
     return hq, q
+
+class EQL_Trainer:
+  def __init__(self, agent:MORL_ModelConfig, env:MORL_EnvConfig, 
+               buffer:utils_ReplayBuffer_Priority, model:EQL_Network, 
+               target_model:EQL_Network, device):
+    utils_autoAssign()
+    self.history = {
+      'loss':[],
+      'reward':[]
+    }
+    # self.probe
+
+  def sample(self) -> dict:
+    return self.buffer.sample_sample(self.batch_size)
+
+  def memorize(self, state:np.ndarray, action:np.ndarray, next_state:np.ndarray, 
+               reward:np.ndarray, done:bool):
+    state = torch.from_numpy(state).float().to(self.device)
+    next_state = torch.from_numpy(next_state).float().to(self.device)
+    reward = torch.from_numpy(reward).float().to(self.device)
+    action = int(action.item())
+    td_error = self.agent.get_td_error(state, action, next_state, reward, done)
+    priority = torch.abs(td_error)+1e-5
+    self.buffer.add_sample(Sample(state, action, reward, next_state, done), priority)
+
+  def update_episode(self):
+    '''
+      每次 episode 结束时更新
+    '''
+    
+  
+  def train(self, episodes_num, probe):
+    for episode in tqdm(range(episodes_num), desc=self.agent.name+' Iteration'):
+      done = False
+      tot_reward = 0
+      loss, cnt = 0, 0
+      state, _ = self.env.reset()
+      while not done:
+        action = self.agent.take_action(state)
+        next_state, reward, terminated, truncated, _ = self.env.step(action)
+        done = terminated or truncated
+        self.memorize(state, action, next_state, reward, done)
+        if len(self.buffer) > self.buffer.batch_size:
+          d = self.sample()
+          batch = {k: v[:5] for k, v in d.items()}
+          loss_w = {k: v[-2:] for k, v in d.items()}
+          loss += self.agent.update(batch, loss_w)
+        tot_reward += (probe.cpu().numpy().dot(reward))*np.power(self.agent.gamma, cnt)
+        cnt += 1
+        state = next_state
+        if cnt > 100:
+          break
+      self.update_episode()
+      self.history['reward'].append(tot_reward)
+      self.history['loss'].append(loss)
+    return self.history
+
 
 #---------------------- Trainer -------------------------
 #                      2026/1/25

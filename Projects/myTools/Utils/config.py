@@ -2,8 +2,29 @@
 #                           2025/10/24
 #                            shamrock
 
+import numpy as np
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+class Sample:
+  '''
+    用来记录一次采样
+  '''
+  __slots__ = ('state', 'action', 'reward', 'next_state', 'done')
+
+  def __init__(self, 
+               state:np.ndarray, action:np.ndarray,
+               reward:np.ndarray, next_state:np.ndarray,
+               done:np.ndarray):
+    self.state = state
+    self.action = action
+    self.reward = reward
+    self.next_state = next_state
+    self.done = done
+
+  def __repr__(self):
+    return (f"Sample(s{self.state.shape}, a{self.action.shape}, "
+            f"r={self.reward.item():.2f}, d={self.done.item()})")
 
 class Trajectory:
   '''
