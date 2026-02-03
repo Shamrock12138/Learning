@@ -108,13 +108,23 @@ class EQL_Network(torch.nn.Module):
 class EQL_Trainer:
   def __init__(self, agent:MORL_ModelConfig, env:MORL_EnvConfig, 
                buffer:utils_ReplayBuffer_Priority, model:EQL_Network, 
-               target_model:EQL_Network, device):
+               target_model:EQL_Network, device, params:dict):
     utils_autoAssign()
+    utils_setAttr(self, params)
     self.history = {
       'loss':[],
       'reward':[]
     }
-    # self.probe
+
+    # 同伦优化相关配置
+    self.beta_init = self.beta
+    self.beta_uplim = 1.00
+    self.tau = 1000.
+    self.beta_expbase = float(np.power(self.tau*(self.beta_uplim-self.beta), 1./self.episode_num))
+    self.beta_delta = self.beta_expbase / self.tau
+
+    # ε-greedy相关配置
+    self.epsilon_delta = (self.epsilon-0.05)/self.episode_num
 
   def sample(self) -> dict:
     return self.buffer.sample_sample(self.batch_size)
@@ -129,12 +139,30 @@ class EQL_Trainer:
     priority = torch.abs(td_error)+1e-5
     self.buffer.add_sample(Sample(state, action, reward, next_state, done), priority)
 
-  def update_episode(self):
+  def episode_end(self):
     '''
       每次 episode 结束时更新
     '''
-    
+    self.w_kept = None
+    # 探索率衰减
+    self.epsilon -= self.epsilon_delta
+    # 同伦优化
+    self.beta += self.beta_delta
+    self.beta_delta = (self.beta-self.beta_init)*self.beta_expbase+self.beta_init-self.beta
+
+  def take_action(self, state):
+    force_explore = (
+      len(self.buffer) < self.batch_size or 
+      torch.rand(1, device=self.device).item() < self.epsilon
+    )
+    return self.agent.take_action(state, force_explore)
   
+  def update(self):
+    d = self.sample()
+    batch = {k: v[:5] for k, v in d.items()}
+    loss_w = {k: v[-2:] for k, v in d.items()}
+    return self.agent.update(batch, loss_w)
+
   def train(self, episodes_num, probe):
     for episode in tqdm(range(episodes_num), desc=self.agent.name+' Iteration'):
       done = False
@@ -142,42 +170,21 @@ class EQL_Trainer:
       loss, cnt = 0, 0
       state, _ = self.env.reset()
       while not done:
-        action = self.agent.take_action(state)
+        action = self.take_action()
         next_state, reward, terminated, truncated, _ = self.env.step(action)
         done = terminated or truncated
         self.memorize(state, action, next_state, reward, done)
         if len(self.buffer) > self.buffer.batch_size:
-          d = self.sample()
-          batch = {k: v[:5] for k, v in d.items()}
-          loss_w = {k: v[-2:] for k, v in d.items()}
-          loss += self.agent.update(batch, loss_w)
+          loss += self.update()
         tot_reward += (probe.cpu().numpy().dot(reward))*np.power(self.agent.gamma, cnt)
         cnt += 1
         state = next_state
         if cnt > 100:
           break
-      self.update_episode()
+      self.episode_end()
       self.history['reward'].append(tot_reward)
       self.history['loss'].append(loss)
     return self.history
-
-
-#---------------------- Trainer -------------------------
-#                      2026/1/25
-
-# class MORL_Trainer:
-#   def __init__(self, agent:MORL_ModelConfig, params):
-#     utils_setAttr(self, params)
-#     self.agent = agent
-
-#   def train(self):
-#     '''
-#       开始训练，
-#     '''
-#     with tqdm(total=int(self.episodes_num), desc=self.agent.name+' Iteration') as pbar:
-      
-    
-  
 
 if __name__ == '__main__':
   a = torch.arange(2*3)

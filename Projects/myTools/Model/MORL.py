@@ -20,24 +20,15 @@ class EQL(MORL_ModelConfig):
     EQL 算法
 
   '''
-  def __init__(self, env:MORL_EnvConfig, model:EQL_Network, buffer:utils_ReplayBuffer_Priority, 
-               agent_params:dict, device):
+  def __init__(self, env:MORL_EnvConfig, model:EQL_Network, 
+               buffer:utils_ReplayBuffer_Priority, 
+               params:dict, device):
     super().__init__()
     utils_autoAssign(self)
-    utils_setAttr(self, agent_params)
+    utils_setAttr(self, params)
 
-    self.model = model               # 当前网络
-    self.target_model = copy.deepcopy(model) # 目标网络
-    self.epsilon_delta = (self.epsilon-0.05)/self.episode_num
-
-    # 同伦优化相关配置
-    self.beta_init = self.beta
-    self.beta_uplim = 1.00
-    self.tau = 1000.
-    self.beta_expbase = float(np.power(self.tau*(self.beta_uplim-self.beta), 1./self.episode_num))
-    self.beta_delta = self.beta_expbase / self.tau
-
-    self.trans = buffer.Transition
+    self.model = model                        # 当前网络
+    self.target_model = copy.deepcopy(model)  # 目标网络
 
     if self.optimizer == 'Adam':
       self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
@@ -45,12 +36,16 @@ class EQL(MORL_ModelConfig):
     self.w_kept = None
     self.update_count = 0
 
-  def take_action(self, state:np.ndarray, preference:Optional[torch.Tensor]=None):
+  def take_action(self, state:np.ndarray, force_explore:bool,
+                  preference:Optional[torch.Tensor]=None):
     if preference is None:
       if self.w_kept is None:
         self.w_kept = torch.randn(self.model.reward_size)
         self.w_kept = torch.abs(self.w_kept)/torch.norm(self.w_kept, p=1)
       preference = self.w_kept
+
+    if force_explore:
+      return np.random.randint(self.model.action_size)
 
     state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
     preference_tensor = preference.unsqueeze(0)
@@ -58,17 +53,7 @@ class EQL(MORL_ModelConfig):
       _, q_values = self.model(state_tensor, preference_tensor)
     q_values = q_values.squeeze(0)
     scalarized_q = torch.matmul(q_values, preference)
-    greedy_action = scalarized_q.argmax().item()
-    if self.is_train == 1:
-      # 检查是否强制探索（经验池未满或随机探索）
-      force_explore = (
-        self.buffer.size() < self.batch_size or 
-        torch.rand(1, device=self.device).item() < self.epsilon
-      )
-      if force_explore:
-        # 随机选择动作
-        return np.random.randint(self.model.action_size)
-    return greedy_action
+    return scalarized_q.argmax().item()
   
   def get_td_error(self, state:torch.Tensor, action:int, 
                    next_state:torch.Tensor, reward:torch.Tensor, 
@@ -208,11 +193,7 @@ class EQL(MORL_ModelConfig):
 
     return total_loss.item()
 
-  def reset(self):
-    self.w_kept = None
-    self.epsilon -= self.epsilon_delta
-    self.beta += self.beta_delta
-    self.beta_delta = (self.beta-self.beta_init)*self.beta_expbase+self.beta_init-self.beta
+# ------------------------
 
   def predict(self, probe):
     with torch.no_grad():
@@ -278,29 +259,30 @@ class EQL(MORL_ModelConfig):
         episodes_num - 训练次数
         probe - 用户想要的偏好，例：[0.5, 0.5]
     '''
-    loss_history = []
-    reward_history = []
-    for episode in tqdm(range(episodes_num), desc=self.name+' Iteration'):
-      done = False
-      tot_reward = 0
-      loss, cnt = 0, 0
-      state, _ = self.env.reset()
-      while not done:
-        action = self.take_action(state)
-        next_state, reward, terminated, truncated, _ = self.env.step(action)
-        done = terminated or truncated
-        self.memorize(state, action, next_state, reward, float(done))
-        if self.buffer.size() > self.batch_size:
-          loss += self.update()
-        tot_reward += (probe.cpu().numpy().dot(reward))*np.power(self.gamma, cnt)
-        cnt += 1
-        if cnt > 100:
-          done = True
-          self.reset()
-        state = next_state
-      reward_history.append(tot_reward)
-      loss_history.append(loss)
-    return loss_history, reward_history
+    pass
+    # loss_history = []
+    # reward_history = []
+    # for episode in tqdm(range(episodes_num), desc=self.name+' Iteration'):
+    #   done = False
+    #   tot_reward = 0
+    #   loss, cnt = 0, 0
+    #   state, _ = self.env.reset()
+    #   while not done:
+    #     action = self.take_action(state)
+    #     next_state, reward, terminated, truncated, _ = self.env.step(action)
+    #     done = terminated or truncated
+    #     self.memorize(state, action, next_state, reward, float(done))
+    #     if self.buffer.size() > self.batch_size:
+    #       loss += self.update()
+    #     tot_reward += (probe.cpu().numpy().dot(reward))*np.power(self.gamma, cnt)
+    #     cnt += 1
+    #     if cnt > 100:
+    #       done = True
+    #       self.reset()
+    #     state = next_state
+    #   reward_history.append(tot_reward)
+    #   loss_history.append(loss)
+    # return loss_history, reward_history
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
