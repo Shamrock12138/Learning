@@ -7,8 +7,9 @@ import os, argparse, sys
 from datetime import datetime
 from pathlib import Path
 
+_Red = '\033[31m'
 _Green = '\033[32m'
-_Red = '\033[33m'
+_Yellow = '\033[33m'
 _Blue = '\033[34m'
 _End = '\033[0m'
 
@@ -19,15 +20,6 @@ _End = '\033[0m'
     git merge [source]
     git push origin [target]
 '''
-
-#----------------- 要提交的文件 ----------------
-
-submit_files = [
-  '.'
-]
-
-commit_message = 'Shamrock_PC'
-
 #----------------- 工具函数 ----------------
 
 REPO_ROOT = Path.cwd()
@@ -77,7 +69,7 @@ def submit(files, message, cwd=None):
 
   branch = current_branch(cwd)
   run_git_cmd(["push", "origin", branch], cwd=cwd)
-  print(_Green+f"✓ 已提交并推送到 origin/{branch}"+_End)
+  print(_Green+f"已提交并推送到 origin/{branch}"+_End)
 
 def merge(source, target, cwd=None):
   if not is_clean(cwd):
