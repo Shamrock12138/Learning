@@ -22,8 +22,6 @@ _End = '\033[0m'
 '''
 #----------------- 工具函数 ----------------
 
-REPO_ROOT = Path.cwd()
-
 def run_git_cmd(cmd, cwd=None, allow_fail=False):
   """安全执行 git 命令，返回 (stdout, stderr)"""
   try:
