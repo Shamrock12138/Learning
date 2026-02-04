@@ -2,10 +2,9 @@
 #                           2025/12/1
 #                            shamrock
 
-import subprocess
-import os, argparse, sys
 from datetime import datetime
 from pathlib import Path
+import subprocess, argparse, sys
 
 _Red = '\033[31m'
 _Green = '\033[32m'
@@ -143,6 +142,20 @@ def main():
     sys.exit(1)
 
 if __name__ == "__main__":
+  '''
+    使用实例：
+      # 提交当前目录所有更改
+      python git.py -a submit
+
+      # 合并 develop → main
+      python git.py -a merge -s develop -t main
+
+      # 更新当前分支
+      python git.py -a update
+
+      # 指定仓库路径
+      python git.py -a submit --repo /path/to/repo
+  '''
   main()
 
 
