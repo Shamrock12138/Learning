@@ -49,7 +49,7 @@ class Env_DeepSeaTreasure(MORL_EnvConfig):
     self.train_model = False
     self._create_env()
   
-  def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None):
+  def reset(self, seed=None) -> Tuple[np.ndarray, Dict]:
     '''
       重置环境到初始状态
       返回 (initial_state, info)

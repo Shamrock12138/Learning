@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import time, torch, inspect, os, json, random
 
+from myTools.Utils.config import *
+
 #---------------------- 其他 -------------------------
 #                      2026/1/13
 
@@ -37,7 +39,7 @@ def utils_timer(func):
     begin_time = time.time()
     ret = func(*args, **kwargs)
     end_time = time.time()
-    print(f'Run Time: {end_time-begin_time} s')
+    print(f'Run Time {func.__name__}: {end_time-begin_time} s')
     return ret
   return wrapper
 
@@ -51,7 +53,7 @@ def utils_autoAssign(self):
           auto_assign(self)   # → self.a, self.b, self.c 自动创建
   '''
   frame = inspect.currentframe().f_back
-  func_name = frame.f_code.co_name
+  # func_name = frame.f_code.co_name
   init_method = getattr(self.__class__, '__init__')
   sig = inspect.signature(init_method)
   local_vars = frame.f_locals
@@ -72,20 +74,25 @@ def utils_setAttr(self, d:dict):
 #---------------------- 模型保存函数 -------------------------
 #                        2026/1/13
 
-def utils_showHistory(history:list, title:str, x_lable:str, y_lable:str, save_path=None):
+def utils_showHistory(histories:list, labels, title:str, x_lable:str, y_lable:str, save_path=None):
   '''
     显示 history 的曲线图，x轴y轴为 x_lable, y_lable，标题为 title
       params:
-        history - 列表
+        histories - 列表的列表
+        labels - 每个历史数据序列的标签
         title, x_lable, y_lable - 字符串
         save_path - 保存路径，默认None不保存
   '''
-  episodes_list = list(range(len(history)))
-  plt.plot(episodes_list, history)
+  episodes_list = list(range(len(histories[0])))
+
+  for i, history in enumerate(histories):
+    plt.plot(episodes_list[:len(history)], history, label=labels[i])
+
   plt.xlabel(x_lable)
   plt.ylabel(y_lable)
   plt.title(title)
-  plt.grid(True)  # 增强可读性
+  plt.legend()        # 显示图例
+  plt.grid(True)      # 增强可读性
   plt.tight_layout()  # 防止标签被裁剪
 
   if save_path:
@@ -158,13 +165,57 @@ def utils_readParams(json_path:str, sub_name:str) -> dict:
 #---------------------- 实用工具函数 -------------------------
 #                        2026/1/23
 
-class utils_prioritReplayBuffer:
+class utils_ReplayBuffer:
   '''
-    带优先级的经验回放池
+    普通 Replay Buffer
   '''
-  def __init__(self, capacity, transition_type:tuple, alpha:float=0.6, beta:float=0.4,
+  def __init__(self, capacity):
+    self.buffer = deque(maxlen=capacity)
+
+  def add_trajectory(self, trajectory:Trajectory):
+    self.buffer.append(trajectory)
+
+  def add_sample(self, sample:Sample):
+    self.buffer.append(sample)
+
+  def sample_trajectory(self, batch_size):
+    batch = dict(states=[], actions=[], next_states=[], rewards=[], dones=[])
+    for _ in range(batch_size):
+      traj = random.sample(self.buffer, 1)[0]
+      step_state = np.random.randint(len(traj))
+      batch['states'].append(traj.states[step_state])
+      batch['next_states'].append(traj.states[step_state+1])
+      batch['actions'].append(traj.actions[step_state])
+      batch['rewards'].append(traj.rewards[step_state])
+      batch['dones'].append(traj.dones[step_state])
+    batch['states'] = np.array(batch['states'])
+    batch['next_states'] = np.array(batch['next_states'])
+    batch['actions'] = np.array(batch['actions'])
+    return batch
+  
+  def sample_sample(self, batch_size) -> dict:
+    actual_batch_size = min(batch_size, len(self.buffer))
+    sampled = random.sample(self.buffer, actual_batch_size)
+
+    return {
+      'states': np.stack([s.state for s in sampled], axis=0),
+      'actions': np.stack([s.action for s in sampled], axis=0),
+      'next_states': np.stack([s.next_state for s in sampled], axis=0),
+      'rewards': np.stack([s.reward for s in sampled], axis=0),  # 0-dim → (batch_size,)
+      'dones': np.stack([s.done for s in sampled], axis=0)       # 0-dim → (batch_size,)
+    }
+
+  def __len__(self):
+    return len(self.buffer)
+
+class utils_ReplayBuffer_Priority(utils_ReplayBuffer):
+  '''
+    带优先级的经验回放池，可使用sumtree优化
+  '''
+  def __init__(self, capacity, alpha:float=0.6, beta:float=0.4,
                beta_increment:float=0.001):
     '''
+      使用重要性采样修正因为引入优先级采样造成的分布偏移
       params:
         capacity - 缓冲区最大容量
         transition_type - 用于存储经验的命名元组类型及属性
@@ -173,88 +224,132 @@ class utils_prioritReplayBuffer:
         beta - 重要性采样权重参数，用于纠正偏差
         beta_increment - beta的增量（每次采样后增加）
     '''
+    super().__init__(capacity=capacity)
     utils_autoAssign(self)
-    self.Transition = namedtuple('Transition', field_names=transition_type)
-    self.buffer = deque(maxlen=capacity)
-    self.priorities = deque(maxlen=capacity)
     self.max_priority = 1.0
+    self.epsilon = 1e-6
+    self.priorities = np.zeros(capacity, dtype=np.float32)
+    self.pos = 0
 
-  def add(self, priority=None, **kwargs) -> None:
+  def add_sample(self, sample:Sample, priority:float=None) -> None:
     '''
-      params:
-        **kwargs - 必须包含transition_type定义的所有字段
-          例如: (state, action, reward, next_state, done)
-        priority - 初始优先级，如果为None则使用当前最大优先级
+      添加样本
     '''
-    missing_fields = [field for field in self.Transition._fields if field not in kwargs]
-    if missing_fields:
-      raise ValueError(f"Missing fields: {missing_fields}")
-    transition = self.Transition(**{field: kwargs[field] for field in self.Transition._fields})
-    
-    self.buffer.append(transition)
+    super().add_sample(sample)
+    priority = priority or self.max_priority
+    priority = (priority+self.epsilon)**self.alpha
+    self.priorities[self.pos] = priority
+    self.max_priority = max(self.max_priority, priority)
+    self.pos = (self.pos+1)%self.capacity
 
-    if priority is None:
-      priority = self.max_priority
-    elif priority > self.max_priority:
-      priority = self.max_priority
-    self.priorities.append(priority)
-
-  def sample(self, batch_size):
+  def sample_sample(self, batch_size) -> dict:
     '''
-      从 buffer 中采样数据,数量为 batch_size ，如果 batch_size == None，则全部取出 
-      return:  
-        samples - [(s1, a1, r1, n_s1, d1), ...]
-        transitions_dict - {
-        'states': (state1, state2 ...),
-        'actions': ...,
-        'next_states': ...,
-        'rewards': ...,
-        'dones': ...
-        }
-      example:  
-        state, action, reward, next_state, done = zip(*transitions)
-        np.array(state), action, reward, np.array(next_state), done
+      采样
     '''
-    priority_array = np.array(self.priorities, dtype=np.float32)
-    probs = priority_array**self.alpha
-    probs /= probs.sum()+1e-9
-
-    indices = np.random.choice(len(self.buffer), batch_size, replace=False, p=probs)
+    # 优先级采样
+    valid_priorities = self.priorities[:len(self)]
+    probs = valid_priorities**self.alpha
+    probs /= probs.sum()+self.epsilon
+    indices = np.random.choice(
+      len(self), 
+      size=batch_size,
+      replace=(batch_size > len(self)),
+      p=probs
+    )
     samples = [self.buffer[i] for i in indices]
 
-    transitions_dict = {}
-    for field in self.Transition._fields:
-      field_values = [getattr(sample, field) for sample in samples]
-      transitions_dict[field+'s'] = field_values
+    # 计算重要性采样权重
+    sample_probs = probs[indices]
+    weights = (len(self)*sample_probs)**-self.beta
+    weights /= weights.max()+self.epsilon  # 归一化到 [0,1]
 
-    return samples, transitions_dict
+    batch = {
+      'states': np.stack([s.state for s in samples], axis=0),
+      'actions': np.stack([s.action for s in samples], axis=0),
+      'next_states': np.stack([s.next_state for s in samples], axis=0),
+      'rewards': np.stack([s.reward for s in samples], axis=0),
+      'dones': np.stack([s.done for s in samples], axis=0),
+      'indices': indices.astype(np.int32),    # PER 关键：用于更新优先级
+      'weights': weights.astype(np.float32)   # PER 关键：用于损失加权
+    }
 
-  def size(self):
-    return len(self.buffer)
+    # 衰减 beta（向无偏估计收敛）
+    self.beta = min(1.0, self.beta+self.beta_increment)
+    return batch
+  
+  def update_priorities(self, indices:np.ndarray, td_errors:np.ndarray):
+    '''
+      根据 TD_error 更新采样样本的优先级
+    '''
+    priorities = np.abs(td_errors)+self.epsilon
+    self.priorities[indices] = priorities
+    self.max_priority = max(self.max_priority, priorities.max())
 
-# TODO
-# class Utils_SavePath:
-#   '''
-#     管理 模型以及训练结果 的保存、格式
-#   '''
-#   def __init__(self):
-#     pass
+  def __len__(self):
+    return super().__len__()
 
-#   def 
+class utils_ReplayBuffer_HER(utils_ReplayBuffer):
+  '''
+    带 HER 的 ReplayBuffer，其中 state 包含两部分：[state, goal]
+  '''
+  def __init__(self, capacity):
+    super().__init__(capacity=capacity)
+  
+  def _HER(self, new_goal, state, action, reward, next_state, done):
+    '''
+      将 (state, action, reward, next_state, done) 通过设置 new_goal 的方式，
+      得到新轨迹 (state, action, reward', next_state, done')
+    '''
+    dis = np.linalg.norm(next_state[:2]-new_goal)
+    reward = -1.0 if dis > 0.15 else 0
+    done = False if dis > 0.15 else True
+    state = np.hstack((state[:2], new_goal))
+    next_state = np.hstack((next_state[:2], new_goal))
+    return state, action, reward, next_state, done
+
+  def sample(self, batch_size, her_ratio=0.8):
+    batch = dict(states=[], actions=[], next_states=[], rewards=[], dones=[])
+    for _ in range(batch_size):
+      traj = random.sample(self.buffer, 1)[0]
+      step_state = np.random.randint(len(traj))
+      state = traj.states[step_state]
+      next_state = traj.states[step_state + 1]
+      action = traj.actions[step_state]
+      reward = traj.rewards[step_state]
+      done = traj.dones[step_state]
+
+      if np.random.uniform() <= her_ratio:
+        # 使用HER算法的future方案设置目标
+        step_goal = np.random.randint(step_state+1, len(traj)+1)
+        goal = traj.states[step_goal][:2]
+
+        state, action, reward, next_state, done = self._HER(goal, state, action, reward, next_state, done)
+
+      batch['states'].append(state)
+      batch['next_states'].append(next_state)
+      batch['actions'].append(action)
+      batch['rewards'].append(reward)
+      batch['dones'].append(done)
+
+    batch['states'] = np.array(batch['states'])
+    batch['next_states'] = np.array(batch['next_states'])
+    batch['actions'] = np.array(batch['actions'])
+    return batch
 
 if __name__ == '__main__':
-  trans = ('state', 'action', 'reward', 'next_state', 'done')
-  buffer = utils_prioritReplayBuffer(capacity=100, transition_type=trans)
-  for i in range(12):
-    buffer.add(
-        priority=i*0.1,
-        state=i*0.1,
-        action=i%2,
-        reward=i*0.5,
-        next_state=(i+1)*0.1,
-        done=(i==9)
-    )
-  print(buffer.sample(1))
+  pass
+  # trans = ('state', 'action', 'reward', 'next_state', 'done')
+  # buffer = utils_prioritReplayBuffer(capacity=100, transition_type=trans)
+  # for i in range(12):
+  #   buffer.add(
+  #       priority=i*0.1,
+  #       state=i*0.1,
+  #       action=i%2,
+  #       reward=i*0.5,
+  #       next_state=(i+1)*0.1,
+  #       done=(i==9)
+  #   )
+  # print(buffer.sample(1))
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
