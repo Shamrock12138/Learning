@@ -38,6 +38,11 @@ class EQL(MORL_ModelConfig):
 
   def take_action(self, state:np.ndarray, force_explore:bool,
                   preference:Optional[torch.Tensor]=None):
+    # take action 目的是尽量多的探索未探索的(s, w)，考虑去掉w的随机性。
+    # 引入主动探索机制，如果Score(w1)>Score(w2)，则选择w1。
+    # 其中得分机制越大，代表wx的需要探索性越强，越应该选择wx。
+    # 引入EC思想，决胜出最有探索价值的w，并产生变异。
+    # AI 给出的建议见 EQL.ipynb
     if preference is None:
       if self.w_kept is None:
         self.w_kept = torch.randn(self.model.reward_size)
