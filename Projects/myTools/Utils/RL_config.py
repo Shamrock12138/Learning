@@ -5,6 +5,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
+from myTools.Utils.config import *
+
 class ENV_INFO(ABC):
   '''
     为各类 RL 环境提供统一的外部调用接口。
@@ -63,16 +65,26 @@ class RL_Model(ABC):
     为各类 RL 算法提供统一的外部调用接口。
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
-      - 子类必须实现 `run` 方法，作为模型的核心执行入口
+      - 子类必须实现 `take_action` 方法，作为模型的外部接口
+      - 子类可以实现 `run` 方法，作为模型的核心执行入口
       - 子类建议实现 show_history 方法，作为训练过程的展示
       - 子类建议实现 render 方法，作为测试过程的展示
       - 子类建议实现 save_model, load_model 方法，作为保存加载模型
   '''
   def __init__(self):
     super().__init__()
+    self.name = None
 
   def __call__(self, *input, **kwds):
     return self.run(*input, **kwds)
+
+  @abstractmethod
+  def take_action(self, state):
+    pass
+
+  @abstractmethod
+  def update(self, trajectory:Trajectory):
+    pass
   
   def show_history(self, history):
     '''
@@ -98,7 +110,6 @@ class RL_Model(ABC):
     '''
     pass
 
-  @abstractmethod
   def run(self, *input, **kwds):
     '''
       模型程序入口

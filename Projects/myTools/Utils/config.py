@@ -1,4 +1,4 @@
-#                           各种配置类
+#                           全局配置类
 #                           2025/10/24
 #                            shamrock
 
@@ -49,8 +49,6 @@ class Trajectory:
     self.rewards.append(reward)
     self.dones.append(done)
     self.length += 1
-
-
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
