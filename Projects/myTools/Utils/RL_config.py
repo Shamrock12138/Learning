@@ -66,7 +66,7 @@ class RL_Model(ABC):
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
       - 子类必须实现 `take_action` 方法，作为模型的外部接口
-      - 子类可以实现 `run` 方法，作为模型的核心执行入口
+      - 子类推荐实现 `train` 方法，作为模型的训练方法，同时方便其他算法调用
       - 子类建议实现 show_history 方法，作为训练过程的展示
       - 子类建议实现 render 方法，作为测试过程的展示
       - 子类建议实现 save_model, load_model 方法，作为保存加载模型
@@ -76,7 +76,7 @@ class RL_Model(ABC):
     self.name = None
 
   def __call__(self, *input, **kwds):
-    return self.run(*input, **kwds)
+    return self.train(*input, **kwds)
 
   @abstractmethod
   def take_action(self, state):
@@ -110,7 +110,8 @@ class RL_Model(ABC):
     '''
     pass
 
-  def run(self, *input, **kwds):
+  @abstractmethod
+  def train(self, *input, **kwds):
     '''
       模型程序入口
     '''

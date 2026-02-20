@@ -2,11 +2,13 @@
 #                           2025/11/30
 #                            shamrock
 import numpy as np
-from .RL_config import ENV_INFO
 import torch, random
 import torch.nn.functional as F
 from torch.distributions import Normal
 from tqdm import tqdm
+
+from myTools.Utils.config import *
+from .RL_config import ENV_INFO
 
 #---------------------- 获取 action 的方法 -------------------------
 #                         2025/12/4
@@ -138,7 +140,10 @@ class PolicyNetContinuous(torch.nn.Module):
 
 def train_off_policy(env:ENV_INFO, agent, num_episodes:int, replay_buffer, 
                      min_size, batch_size):
-  return_list = []
+  '''
+    可以 take action 的同时 update
+  '''
+  rewards_list = []
   with tqdm(total=int(num_episodes), desc=agent.name+' Iteration') as pbar:
     for i_episode in range(num_episodes):
       episode_return = 0
@@ -154,11 +159,14 @@ def train_off_policy(env:ENV_INFO, agent, num_episodes:int, replay_buffer,
           transition_dict = replay_buffer.sample(batch_size)[0]
           # transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d}
           agent.update(transition_dict)
-      return_list.append(episode_return)
+      rewards_list.append(episode_return)
       pbar.update(1)
-  return return_list
+  return rewards_list
 
 def train_on_policy(env:ENV_INFO, agent, num_episodes:int):
+  '''
+    只能 take action 完成后，进行update
+  '''
   return_list = []
   with tqdm(total=num_episodes, desc=agent.name+'Iteration') as pbar:
     for i_episode in range(num_episodes):
@@ -181,55 +189,55 @@ def train_on_policy(env:ENV_INFO, agent, num_episodes:int):
       pbar.update(1)
   return return_list
 
-def RTools_Sample(MDP, INFO, pi, timestep_max, number):
-  '''
-    对INFO环境下的MDP进行采样，返回采样得到的所有“路径”[s, a, r, s_next]
-      params:
-        MDP - 描述环境马尔可夫决策过程 提供(S, A, P, R, gamma)
-          S: list [states_num] 所有状态
-          A: list [actions_num] 所有动作  
-          P: list [states_num, actions_num, states_num] s采取了a动作后的next_s的所有概率
-          R: list [states_num, actions_num] s采取了a动作后的奖励
-        INFO - 提供环境信息 (end: list, states_num: int, actions_num: int)
-        pi: dict - 策略
-        timestep_max - 单条轨迹的最大时间步数
-        number - 要生成的 episode 总数
-      return:
-        episodes - number 次 episode 的探索列表 [[s, a, r, s_next], ...]
-  '''
-  S, A, P, R, gamma = MDP
-  end, states_num, actions_num = INFO
-  episodes = []
-  for _ in range(number):
-    episode, timestep = [], 0
-    s = S[np.random.randint(states_num)]
-    while s not in end and timestep <= timestep_max:
-      timestep += 1
-      rand, temp = np.random.rand(), 0
-      for a_opt in A:
-        # temp += pi.get(s+' '+a_opt, 0)
-        temp += pi[s][a_opt]
-        if temp > rand:
-          a = a_opt
-          # r = R.get(s+' '+a, 0)
-          r = R[s][a]
-          break
-      rand, temp = np.random.rand(), 0
-      for s_opt in S:
-        # temp += P.get(join(join(s, a), s_opt), 0)
-        temp += P[s][a][s_opt]
-        if temp > rand:
-          s_next = s_opt
-          break
-      episode.append((s, a, r, s_next)) 
-      s = s_next
-    episodes.append(episode)
-  return episodes
+# def RTools_Sample(MDP, INFO, pi, timestep_max, number):
+#   '''
+#     对INFO环境下的MDP进行采样，返回采样得到的所有“路径”[s, a, r, s_next]
+#       params:
+#         MDP - 描述环境马尔可夫决策过程 提供(S, A, P, R, gamma)
+#           S: list [states_num] 所有状态
+#           A: list [actions_num] 所有动作  
+#           P: list [states_num, actions_num, states_num] s采取了a动作后的next_s的所有概率
+#           R: list [states_num, actions_num] s采取了a动作后的奖励
+#         INFO - 提供环境信息 (end: list, states_num: int, actions_num: int)
+#         pi: dict - 策略
+#         timestep_max - 单条轨迹的最大时间步数
+#         number - 要生成的 episode 总数
+#       return:
+#         episodes - number 次 episode 的探索列表 [[s, a, r, s_next], ...]
+#   '''
+#   S, A, P, R, gamma = MDP
+#   end, states_num, actions_num = INFO
+#   episodes = []
+#   for _ in range(number):
+#     episode, timestep = [], 0
+#     s = S[np.random.randint(states_num)]
+#     while s not in end and timestep <= timestep_max:
+#       timestep += 1
+#       rand, temp = np.random.rand(), 0
+#       for a_opt in A:
+#         # temp += pi.get(s+' '+a_opt, 0)
+#         temp += pi[s][a_opt]
+#         if temp > rand:
+#           a = a_opt
+#           # r = R.get(s+' '+a, 0)
+#           r = R[s][a]
+#           break
+#       rand, temp = np.random.rand(), 0
+#       for s_opt in S:
+#         # temp += P.get(join(join(s, a), s_opt), 0)
+#         temp += P[s][a][s_opt]
+#         if temp > rand:
+#           s_next = s_opt
+#           break
+#       episode.append((s, a, r, s_next)) 
+#       s = s_next
+#     episodes.append(episode)
+#   return episodes
 
 #---------------------- 评价指标 -------------------------
 #                      2025/11/29
 
-def RTools_OccupancyMeasure(episodes, s, a, timestep_max, gamma):
+# def RTools_OccupancyMeasure(episodes, s, a, timestep_max, gamma):
   '''
     计算 (s, a) 的占用度量，即：(s, a) 在环境交互过程的频率
       params:
@@ -257,7 +265,7 @@ def RTools_OccupancyMeasure(episodes, s, a, timestep_max, gamma):
 #---------------------- 获取 value 的方法 -------------------------
 #                         2025/11/30
 
-def RTools_MonteCorlo(episodes, gamma, first_visit=True):
+# def RTools_MonteCorlo(episodes, gamma, first_visit=True):
   '''
     用 Monte Corlo 的方式，计算 episodes 中每个 state 的 V
       params:
@@ -282,57 +290,57 @@ def RTools_MonteCorlo(episodes, gamma, first_visit=True):
 
 #---------------------- 存储经验 -------------------------
 #                       2025/12/9
-import collections
+# import collections
 
-class ReplayBuffer:
-  '''
-    经验回放池
-  '''
-  def __init__(self, capacity=1000):
-    self.buffer = collections.deque(maxlen=capacity)
+# class ReplayBuffer:
+#   '''
+#     经验回放池
+#   '''
+#   def __init__(self, capacity=1000):
+#     self.buffer = collections.deque(maxlen=capacity)
 
-  def add(self, state, action, reward, next_state, done):
-    self.buffer.append((state, action, reward, next_state, done))
+#   def add(self, state, action, reward, next_state, done):
+#     self.buffer.append((state, action, reward, next_state, done))
 
-  def sample(self, batch_size=None):
-    '''
-      从 buffer 中采样数据,数量为 batch_size ，如果 batch_size == None，则全部取出 
-      return:  
-        transitions_dict - {
-        'states': (state1, state2 ...),
-        'actions': ...,
-        'next_states': ...,
-        'rewards': ...,
-        'dones': ...
-        }
-      example:  
-        state, action, reward, next_state, done = zip(*transitions)
-        np.array(state), action, reward, np.array(next_state), done
-    '''
-    if batch_size is None:
-      batch_size = self.size()
-    transitions = random.sample(self.buffer, batch_size)
-    state, action, reward, next_state, done = zip(*transitions)
-    transitions_dict = {
-      'states': np.array(state),
-      'actions': action,
-      'next_states': np.array(next_state),
-      'rewards': reward,
-      'dones': done
-    }
-    return transitions_dict, np.array(state), action, reward, np.array(next_state), done
+#   def sample(self, batch_size=None):
+#     '''
+#       从 buffer 中采样数据,数量为 batch_size ，如果 batch_size == None，则全部取出 
+#       return:  
+#         transitions_dict - {
+#         'states': (state1, state2 ...),
+#         'actions': ...,
+#         'next_states': ...,
+#         'rewards': ...,
+#         'dones': ...
+#         }
+#       example:  
+#         state, action, reward, next_state, done = zip(*transitions)
+#         np.array(state), action, reward, np.array(next_state), done
+#     '''
+#     if batch_size is None:
+#       batch_size = self.size()
+#     transitions = random.sample(self.buffer, batch_size)
+#     state, action, reward, next_state, done = zip(*transitions)
+#     transitions_dict = {
+#       'states': np.array(state),
+#       'actions': action,
+#       'next_states': np.array(next_state),
+#       'rewards': reward,
+#       'dones': done
+#     }
+#     return transitions_dict, np.array(state), action, reward, np.array(next_state), done
 
-  def size(self):
-    return len(self.buffer)
+#   def size(self):
+#     return len(self.buffer)
 
-class HER:
-  '''
-    Hindsight Experience Replay - 事后经验回放
-    论文：
-      "Hindsight Experience Replay" - arXiv:1707.01495（2017）
-  '''
-  def __init__(self):
-    pass
+# class HER:
+#   '''
+#     Hindsight Experience Replay - 事后经验回放
+#     论文：
+#       "Hindsight Experience Replay" - arXiv:1707.01495（2017）
+#   '''
+#   def __init__(self):
+#     pass
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

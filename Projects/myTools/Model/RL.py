@@ -414,7 +414,7 @@ class DQN(RL_Model):
     self.q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.target_q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
-    self.replay_buffer = ReplayBuffer(1000)
+    self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'DQN'
 
     self.counter = 0
@@ -425,12 +425,12 @@ class DQN(RL_Model):
     argmax_action = self.q_net(state).argmax().item()
     return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
   
-  def update(self, transition_dict):
-    states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
-    actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(self.device)
-    rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
-    next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
-    dones = torch.tensor(transition_dict['dones'], dtype=torch.float).view(-1, 1).to(self.device)
+  def update(self, transition_dict:SampleBatch):
+    states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
+    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.float32, device=self.device).view(-1, 1)
+    next_states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
+    rewards = torch.as_tensor(transition_dict['rewards'], dtype=torch.float32, device=self.device).view(-1, 1)
+    dones = torch.as_tensor(transition_dict['dones'], dtype=torch.float32, device=self.device).view(-1, 1)
 
     q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
     max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
@@ -487,15 +487,7 @@ class DQN(RL_Model):
     print(f"Model loaded from {path}")
 
   @utils_timer
-  def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
-    '''
-      params:
-        episodes - 
-          None时，提前停止，使用 diff_tol quit_cnt 参数
-          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
-        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
-        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
-    '''
+  def train(self, episodes=None):
     # returns_list = []
     if episodes is not None:
       pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
@@ -513,31 +505,6 @@ class DQN(RL_Model):
             self.update(transition_dict)
           state = n_state
         self.history.append(episode)
-    else:
-      raise ImportError('dont finish')
-      times, cnt = 0, 0
-      while True:
-        times += 1
-        last_Q = self.Q.copy()
-        state, _ = self.env.reset()
-        done = False
-        while not done:
-          action = self.take_action(state)
-          n_state, reward, done, _ = self.env.step(action)
-          if self.replay_buffer.size() > 50:
-            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(32)
-            self.update(transition_dict)
-          state = n_state
-        current_Q = self.Q.copy()
-        Q_diff = np.abs(current_Q-last_Q).sum()
-        # print(f'Q Δ = {Q_diff:.6f}')
-        if Q_diff < diff_tol:
-          cnt += 1
-          if cnt > quit_cnt:
-            print(f'Finished after {times} times.')
-            break
-        else:
-          cnt = 0
 
 #---------------------- Double DQN -------------------------
 #                        2025/12/25
@@ -559,7 +526,7 @@ class DoubleDQN(RL_Model):
     self.q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.target_q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
-    self.replay_buffer = ReplayBuffer(1000)
+    self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'Double_DQN'
 
     self.counter = 0
@@ -663,7 +630,7 @@ class DuelingDQN(RL_Model):
     self.q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
     self.target_q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
     self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
-    self.replay_buffer = ReplayBuffer(1000)
+    self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'Dueling_DQN'
 
     self.counter = 0
@@ -1072,7 +1039,7 @@ class SAC_Discrete(RL_Model):
     self.log_alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
     
     self.name = 'SAC_Discrete'
-    self.replay_buffer = ReplayBuffer(10000)
+    self.replay_buffer = utils_ReplayBuffer(10000)
 
   def take_action(self, state):
     state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)

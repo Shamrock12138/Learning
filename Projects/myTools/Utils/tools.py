@@ -162,7 +162,7 @@ def utils_readParams(json_path:str, sub_name:str) -> dict:
   sub_config = config[sub_name]
   return sub_config
 
-#---------------------- 实用工具函数 -------------------------
+#---------------------- Replay Buffer -------------------------
 #                        2026/1/23
 
 class utils_ReplayBuffer:
@@ -193,7 +193,7 @@ class utils_ReplayBuffer:
     batch['actions'] = np.array(batch['actions'])
     return batch
   
-  def sample_sample(self, batch_size) -> dict:
+  def sample_sample(self, batch_size) -> SampleBatch:
     actual_batch_size = min(batch_size, len(self.buffer))
     sampled = random.sample(self.buffer, actual_batch_size)
 
