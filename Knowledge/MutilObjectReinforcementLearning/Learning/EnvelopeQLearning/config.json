@@ -1,0 +1,30 @@
+{
+  "agent": {
+    "name": "Envelope Q Learning",
+    "is_train": 1,
+
+    "type": "linear",
+    "gamma": 0.99,
+    "lr": 0.001,
+    "epsilon": 0.5,
+    "epsilon_decay": true,
+    "weight_num": 32,
+    "update_freq": 100,
+    "beta": 0.01,
+    "episode_num": 500,
+    "batch_size": 256,
+    "mem_size": 4000,
+
+    "optimizer": "Adam",
+
+    "model_save_path": "F:\\GraduateStudent\\Code\\Git_Learning\\Knowledge\\MutilObjectReinforcementLearning\\Learning\\EnvelopeQLearning\\model",
+    "model_log_path": "F:\\GraduateStudent\\Code\\Git_Learning\\Knowledge\\MutilObjectReinforcementLearning\\Learning\\EnvelopeQLearning\\log"
+  },
+  "buffer": {
+    "mem_size": 4000,
+    "batch_size": 256
+  },
+  "trainer": {
+    "episodes_num": 500
+  }
+}
