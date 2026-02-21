@@ -1,5 +1,5 @@
-#                         多智能体强化学习模型
-#                           2026/1/22
+#                       多智能体强化学习模型
+#                           2026/2/14
 #                            shamrock
 
 from tqdm import tqdm
@@ -10,7 +10,7 @@ from myTools.Utils.RL_config import *
 from myTools.Utils.MARL_config import *
 
 #---------------------- Independent 框架 -------------------------
-#                            2026/2/14
+#                          2026/2/14
 
 class Independent_Trainer(RL_Trainer):
   '''
@@ -25,23 +25,23 @@ class Independent_Trainer(RL_Trainer):
         agents_num - 需要agents的数量
     '''
     model_params = utils_readParams(rl_config, 'model')
-    model_params['device'] = device
     buffer_params = utils_readParams(rl_config, 'buffer')
-    utils_setAttr(buffer_params)
+    trainer_params = utils_readParams(rl_config, 'trainer')
+    utils_setAttr(self, buffer_params)
+    utils_setAttr(self, trainer_params)
     utils_autoAssign(self)
-    self.agents = rl(**model_params)
+    self.agents = rl(**model_params, device=device)
     # self.agents = [rl(**model_params) for _ in range(n_agents)]
     self.name = f'Independent {rl.name}'
 
-  def train(self, episodes_num, is_on_policy:bool, 
-            replay_buffer:utils_ReplayBuffer=None):
+  def train(self, replay_buffer:utils_ReplayBuffer=None):
     '''
       训练 episodes_num 次，
         params:
           is_on_policy - 使用的 RL 算法是否是 on-policy
     '''
     history = {'rewards':[]}
-    if is_on_policy:
+    if self.is_on_policy:
       transition_dict = {
         'states': [], 
         'actions': [], 
@@ -50,8 +50,8 @@ class Independent_Trainer(RL_Trainer):
         'dones': []
         }
       transitions = [transition_dict]*self.agents_num
-      with tqdm(total=episodes_num, desc=f'{self.name}') as pbar:
-        for episode in range(episodes_num):
+      with tqdm(total=self.episodes_num, desc=f'{self.name}') as pbar:
+        for episode in range(self.episodes_num):
           done = [False]*self.agents_num
           state, _ = self.env.reset()
           total_rewards = np.zeros(self.agents_num)
@@ -72,8 +72,8 @@ class Independent_Trainer(RL_Trainer):
             self.agent.update(transitions[i])
           pbar.update(1)
     else:
-      with tqdm(total=episodes_num, desc=f'{self.name}') as pbar:
-        for episode in range(episodes_num):
+      with tqdm(total=self.episodes_num, desc=f'{self.name}') as pbar:
+        for episode in range(self.episodes_num):
           done = [False]*self.agents_num
           state, _ = self.env.reset()
           total_rewards = np.zeros(self.agents_num)
@@ -91,6 +91,10 @@ class Independent_Trainer(RL_Trainer):
           pbar.update(1)
     return history
 
+  def eval(self):
+    '''
+      测试
+    '''
 
 
 #         ,--.                                                 ,--.     

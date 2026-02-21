@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 from myTools.Utils.MARL_config import *
+from myTools.Utils.MARL_tools import *
 from myTools.Utils.tools import *
 
 #---------------------- 多无人机充电场景 -------------------------
@@ -30,6 +31,10 @@ class MARL_Env_UAVs(MARL_EnvConfig):
     self.n_agents = self.n_task_uavs+self.n_charging_uavs
     super().__init__(self.n_agents, self.state_dim, self.action_dim)
 
+    self.cuav_rewards_computer = Charging_UAVs_Rewards(self.n_charging_uavs, 20.0, 40.0,
+                                                       'Knowledge\MutilAgentReinforcementLearning\MultiUAVsCharging\config.json')
+    self.tuav_rewards_computer = Task_UAVs_Rewards()
+    
     self._init_env()
     self.step_count = 0
     self._done = False
@@ -82,6 +87,27 @@ class MARL_Env_UAVs(MARL_EnvConfig):
       )
       self.charging_uavs.append(charging_uav)
 
+  def _get_obs(self) -> np.ndarray:
+    '''
+      返回全局状态 [(x, y, B, type), ..., ] 前为tasks UAVs，
+    '''
+    obs = []
+    for task_uav in self.task_uavs:
+      obs.append(np.array([
+        task_uav.position[0],
+        task_uav.position[1],
+        task_uav.battery,
+        task_uav.type
+      ], dtype=np.float32))
+    for cuav in self.charging_uavs:
+      obs.append(np.array([
+        cuav.position[0],
+        cuav.position[1],
+        cuav.battery,
+        cuav.type
+      ], dtype=np.float32))
+    return np.array(obs, dtype=np.float32)
+
   def reset(self) -> Tuple[np.ndarray, Dict[str, Any]]:
     positions = self._generate_unique_position(self.n_agents+1)
     base_pos = positions[0]
@@ -105,28 +131,13 @@ class MARL_Env_UAVs(MARL_EnvConfig):
     self.step_count = 0
     self.done = False
     self.charged_tasks = set()
+
+    self.tuav_rewards_computer.reset()
+    self.cuav_rewards_computer.reset()
     
     return self._get_obs(), {"base_station": tuple(self.base_station.position)}
 
-  def _get_obs(self) -> np.ndarray:
-    obs = []
-    for task_uav in self.task_uavs:
-      obs.append(np.array([
-        task_uav.position[0],
-        task_uav.position[1],
-        task_uav.battery,
-        task_uav.type
-      ], dtype=np.float32))
-    for cuav in self.charging_uavs:
-      obs.append(np.array([
-        cuav.position[0],
-        cuav.position[1],
-        cuav.battery,
-        cuav.type
-      ], dtype=np.float32))
-    return np.array(obs, dtype=np.float32)
-
-  def _handle_charging_mode(self, cuav:Charging_UAV):
+  def _handle_charging_mode(self, cuav:Charging_UAV) -> Tuple[bool, float]:
     '''
       向可充电范围内特定的uav充电
     '''
@@ -139,7 +150,9 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         target_idx = idx
         break
     if target_idx:
-      cuav.charge_task_uav(self.task_uavs[target_idx])
+      cost, charge = cuav.charge_task_uav(self.task_uavs[target_idx])
+      return True, charge
+    return False, 0.0
 
   def _find_charging_target(self, cuav:Charging_UAV) -> list:
     '''
@@ -153,23 +166,49 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         target_idx.append(idx)
     return target_idx
   
-  def _compute_rewards(self, rewards:np.ndarray, info:dict) -> float:
+  def _compute_rewards(self, charging_mask, charged_amount, info:dict) -> np.ndarray:
     '''
-      返回团队奖励
+      返回 每个无人机的奖励rewards
     '''
-    for i in range(self.n_task_uavs):
-      if self.task_uavs[i].state['alive']:
-        rewards[i] += 0.1
-      else:
-        rewards[i] -= 5.0
-        info["dead_uavs"] += 1
-    alive_tasks = sum(1 for t in self.task_uavs if t.state['alive'])
-    charging_bonus = (
-      info['charging_events']['static']*0.5+
-      info['charging_events']['base']*0.3
+    rewards = np.zeros(self.n_agents)
+
+    cuav_states = np.array([
+      [cuav.position[0], cuav.position[1], cuav.battery, cuav.type]
+      for cuav in self.charging_uavs
+    ])
+
+    # Charging UAVs
+
+    target_tasks = np.full((self.n_charging_uavs), -1.0)
+    for i, cuav in enumerate(self.charging_uavs):
+      targets = self._find_charging_target(cuav)
+      if targets:
+        task_idx = targets[0]
+        task_uav = self.task_uavs[task_idx]
+        target_tasks[i] = [
+          task_uav.position[0], task_uav.position[1], 
+          task_uav.battery, task_uav.type, task_idx
+        ]
+
+    cuav_rewards = self.cuav_rewards_computer(
+      cuav_states=cuav_states,
+      target_tasks=target_tasks,
+      base_position=self.base_station.position,
+      alive_task_mask=np.array([t.state["alive"] for t in self.task_uavs]),
+      charging_mask=charging_mask,
+      charged_amount=charged_amount,
+      dead_task_count=info["dead_uavs"],
+      step_count=self.step_count
     )
-    info['team_reward'] = alive_tasks*0.2+charging_bonus
-    return info['team_reward']
+
+    for i in range(self.n_charging_uavs):
+      global_idx = self.n_task_uavs+i
+      rewards[global_idx] = cuav_rewards[i]
+
+    # Task UAVs
+    # TODO
+
+    return rewards
 
   def _check_termination(self) -> bool:
     '''
@@ -180,14 +219,26 @@ class MARL_Env_UAVs(MARL_EnvConfig):
     return any_dead or max_steps_reached
 
   def step(self, actions:np.ndarray) -> Tuple[np.ndarray, np.ndarray, bool, Dict[str, Any]]:
+    '''
+      所有 UAVs 执行 actions 动作
+        params:
+          actions - 前面是tasks UAVs的动作，后面是charging UAVs的动作
+        return:
+          states - 
+          rewards - [n_agents, ] 前面是tasks UAVs的rewards
+          dones - 
+          info - dict
+    '''
     self.step_count += 1
     self.charged_tasks = set()
-    rewards = np.zeros(self.n_agents)
+    # rewards = np.zeros(self.n_agents)
     info = {
       "charging_events": {"static": 0, "base": 0},
       "dead_uavs": 0,
       "team_reward": 0.0
     }
+    charging_mask = np.zeros(self.n_charging_uavs, dtype=bool)
+    charged_amount = np.zeros(self.n_charging_uavs)
 
     # 处理充电机
     for i in range(self.n_charging_uavs):
@@ -199,12 +250,17 @@ class MARL_Env_UAVs(MARL_EnvConfig):
       if at_base and action == 0:
         charge_amount, new_battery = self.base_station.provide_charging(cuav.battery)
         cuav.battery = new_battery
-        rewards[global_idx] += 0.5
+        # rewards[global_idx] += 0.5
+        charging_mask[i] = True
+        charged_amount[i] = charge_amount
         info["charging_events"]["base"] += 1
         continue
       # 充电模式
       if action == 5:
-        self._handle_charging_mode(cuav)
+        is_charging, charge_amount = self._handle_charging_mode(cuav)
+        if is_charging:
+          charging_mask[i] = True
+          charged_amount[i] = charge_amount
         continue
       # 正常移动
       if action != 0:
@@ -221,7 +277,8 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         if action != 0:
           task_uav.move(action, self.grid_size)
           task_uav.consume_battery(task_uav.movement_cost)
-    self._compute_rewards(rewards, info)
+
+    rewards = self._compute_rewards(charging_mask, charged_amount, info)
     self.done = self._check_termination()
     return self._get_obs(), rewards, self.done, info
 
