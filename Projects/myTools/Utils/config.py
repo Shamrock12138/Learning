@@ -58,19 +58,6 @@ class SampleBatch(TypedDict):
   rewards: np.ndarray     # shape: (batch_size,)
   dones: np.ndarray       # shape: (batch_size,)
 
-class RL_Trainer:
-  def __init__(self) -> None:
-    pass
-
-  @abstractmethod
-  def train(self, episodes_num) -> dict:
-    '''
-      开始训练，返回训练过程的历史记录
-        returns:
-          history: dict - {'loss': [...], 'rewards': [...]}
-    '''
-    pass
-
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  

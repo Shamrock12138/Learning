@@ -398,7 +398,7 @@ class Dyna_Q(RL_Model):
 #                        2025/12/8
 
 class DQN(RL_Model):
-  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
+  def __init__(self, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
                target_update, device):
     '''
       params:
@@ -423,19 +423,19 @@ class DQN(RL_Model):
   def take_action(self, state):
     state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
     argmax_action = self.q_net(state).argmax().item()
-    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+    return RTools_epsilon(self.epsilon, self.action_dim, argmax_action)
   
   def update(self, transition_dict:SampleBatch):
     states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
-    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.float32, device=self.device).view(-1, 1)
-    next_states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
+    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.long, device=self.device).view(-1, 1)
+    next_states = torch.as_tensor(transition_dict['next_states'], dtype=torch.float32, device=self.device)
     rewards = torch.as_tensor(transition_dict['rewards'], dtype=torch.float32, device=self.device).view(-1, 1)
     dones = torch.as_tensor(transition_dict['dones'], dtype=torch.float32, device=self.device).view(-1, 1)
 
     q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
     max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
     q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
-    dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
+    dqn_loss = F.mse_loss(q_value, q_target)
 
     self.optimizer.zero_grad()
     dqn_loss.backward()
@@ -444,27 +444,27 @@ class DQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
-  def show_history(self, save_dir=None, name=None):
-    path = save_dir+name if save_dir and name else None
-    utils_showHistory(self.history, 'DQN on {}'.format(self.env.name), 
-                      'Episodes', 'Returns', path)
+  # def show_history(self, save_dir=None, name=None):
+  #   path = save_dir+name if save_dir and name else None
+  #   utils_showHistory(self.history, 'DQN on {}'.format(self.env.name), 
+  #                     'Episodes', 'Returns', path)
 
-  def render(self, times:int=1):
-    '''
-      渲染 times 趟动画
-    '''
-    self.env.eval()
-    pbar = tqdm(iterable=range(times), desc='test')
-    for T in pbar:
-      done = False
-      state, _ = self.env.reset()
-      self.env.render()
-      time.sleep(0.02)
-      while not done:
-        action = self.take_action(state)
-        state, _, done, _ = self.env.step(action)
-        self.env.render()
-        time.sleep(1/60)
+  # def render(self, times:int=1):
+  #   '''
+  #     渲染 times 趟动画
+  #   '''
+  #   self.env.eval()
+  #   pbar = tqdm(iterable=range(times), desc='test')
+  #   for T in pbar:
+  #     done = False
+  #     state, _ = self.env.reset()
+  #     self.env.render()
+  #     time.sleep(0.02)
+  #     while not done:
+  #       action = self.take_action(state)
+  #       state, _, done, _ = self.env.step(action)
+  #       self.env.render()
+  #       time.sleep(1/60)
 
   def save_model(self, dir_path, name):
     path = dir_path+name
@@ -486,25 +486,25 @@ class DQN(RL_Model):
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
     print(f"Model loaded from {path}")
 
-  @utils_timer
-  def train(self, episodes=None):
-    # returns_list = []
-    if episodes is not None:
-      pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
-      for _ in pbar:
-        state, _ = self.env.reset()
-        done = False
-        episode = 0
-        while not done:
-          action = self.take_action(state)
-          n_state, reward, done, _ = self.env.step(action)
-          self.replay_buffer.add(state, action, reward, n_state, done)
-          episode += reward
-          if self.replay_buffer.size() > 100:
-            transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
-            self.update(transition_dict)
-          state = n_state
-        self.history.append(episode)
+  # @utils_timer
+  # def train(self, episodes=None):
+  #   # returns_list = []
+  #   if episodes is not None:
+  #     pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
+  #     for _ in pbar:
+  #       state, _ = self.env.reset()
+  #       done = False
+  #       episode = 0
+  #       while not done:
+  #         action = self.take_action(state)
+  #         n_state, reward, done, _ = self.env.step(action)
+  #         self.replay_buffer.add(state, action, reward, n_state, done)
+  #         episode += reward
+  #         if self.replay_buffer.size() > 100:
+  #           transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
+  #           self.update(transition_dict)
+  #         state = n_state
+  #       self.history.append(episode)
 
 #---------------------- Double DQN -------------------------
 #                        2025/12/25

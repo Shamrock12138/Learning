@@ -8,11 +8,15 @@ config_path = 'Knowledge\MutilAgentReinforcementLearning\MultiUAVsCharging\confi
 
 env = MARL_Env_UAVs(config_path)
 
-agents_num = utils_readParams(config_path, 'env')['n_charging_uavs']
+env_dir = utils_readParams(config_path, 'env')
+agents_num = env_dir['n_task_uavs']+env_dir['n_charging_uavs']
 agent = Independent_Trainer(DQN, config_path, agents_num, env, device)
 
+replay_buffer = utils_ReplayBuffer(10000)
+
 if __name__ == "__main__":
-  agent.train()
+  agent.train(replay_buffer=replay_buffer)
+  
 
 # if __name__ == "__main__":
 #   # 重置环境

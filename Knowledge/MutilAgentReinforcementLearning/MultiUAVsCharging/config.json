@@ -1,7 +1,7 @@
 {
   "env":{
     "max_steps":100,
-    "n_task_uavs": 3,
+    "n_task_uavs": 4,
     "n_charging_uavs": 2,
     "state_dim": 4,
     "action_dim": 6
@@ -18,7 +18,7 @@
   },
 
   "trainer":{
-    "num_episodes": 100,
+    "episodes_num": 100,
     "is_on_policy": false
   },
 

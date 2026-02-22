@@ -179,7 +179,7 @@ class MARL_Env_UAVs(MARL_EnvConfig):
 
     # Charging UAVs
 
-    target_tasks = np.full((self.n_charging_uavs), -1.0)
+    target_tasks = np.full((self.n_charging_uavs, 5), -1.0)
     for i, cuav in enumerate(self.charging_uavs):
       targets = self._find_charging_target(cuav)
       if targets:
@@ -187,10 +187,10 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         task_uav = self.task_uavs[task_idx]
         target_tasks[i] = [
           task_uav.position[0], task_uav.position[1], 
-          task_uav.battery, task_uav.type, task_idx
+          task_uav.battery, task_uav.type, float(task_idx)
         ]
 
-    cuav_rewards = self.cuav_rewards_computer(
+    cuav_rewards = self.cuav_rewards_computer.compute_rewards(
       cuav_states=cuav_states,
       target_tasks=target_tasks,
       base_position=self.base_station.position,

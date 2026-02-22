@@ -8,7 +8,17 @@ from torch.distributions import Normal
 from tqdm import tqdm
 
 from myTools.Utils.config import *
-from .RL_config import ENV_INFO
+from myTools.Utils.RL_config import *
+
+#---------------------- RL Trainer -------------------------
+#                       2026/2/22
+
+class Trainer(RL_TrainerConfig):
+  def __init__(self) -> None:
+    super().__init__()
+
+  def train(self):
+    pass
 
 #---------------------- 获取 action 的方法 -------------------------
 #                         2025/12/4

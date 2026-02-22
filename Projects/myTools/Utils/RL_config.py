@@ -110,7 +110,6 @@ class RL_Model(ABC):
     '''
     pass
 
-  @abstractmethod
   def train(self, *input, **kwds):
     '''
       模型程序入口
@@ -148,18 +147,32 @@ class MDP:
     if not self.done:
       raise ValueError("Done matrix done must be provided explicitly.")
 
-if __name__ == '__main__':
-  pass
-  # env = ENV_INFO()
-  # env._states_num
-  # mdp = MDP(
-  #   info=ENV_INFO(),
-  # )
-  # mdp.P = [[[1,0,0], [0,1,0]], [[0,1,0], [0,0,1]], [[0,0,1], [0,0,1]]]
-  # States=[0,1,2],
-  #   Actions=[0,1],
-  #   P=[[[1,0,0], [0,1,0]], [[0,1,0], [0,0,1]], [[0,0,1], [0,0,1]]],  # 必须传
-  #   R=[[0,0], [0,0], [1,1]]
+class RL_TrainerConfig(ABC):
+  '''
+    RL训练器
+  '''
+  def __init__(self, rl:RL_Model) -> None:
+    super().__init__()
+
+  def show_history(self):
+    '''
+      展示训练过程的记录
+    '''
+    pass
+
+  @abstractmethod
+  def train(self):
+    '''
+      开始训练
+    '''
+    pass
+
+  @abstractmethod
+  def eval(self):
+    '''
+      开始测试
+    '''
+    pass
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
