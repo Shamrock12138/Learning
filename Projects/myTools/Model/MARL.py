@@ -49,6 +49,7 @@ class Independent_Trainer(RL_TrainerConfig):
 
   def take_action(self, state):
     # 任务机随机移动，充电机根据DQN提供的take action移动
+    
 
   def train(self, replay_buffer:utils_ReplayBuffer=None):
     '''
