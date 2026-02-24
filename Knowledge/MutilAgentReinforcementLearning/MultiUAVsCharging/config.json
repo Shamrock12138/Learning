@@ -1,38 +1,55 @@
 {
   "env":{
-    "max_steps":100,
-    "n_task_uavs": 4,
-    "n_charging_uavs": 2,
+    "max_steps": 500,
+    "n_task_uavs": 1,
+    "n_charging_uavs": 1,
     "state_dim": 4,
-    "action_dim": 6
+    "action_dim": 6,
+
+    "distance": 1.0
   },
 
   "model":{
     "state_dim": 4,
-    "hidden_dim": 256,
-    "action_dim": 6, 
-    "lr": 2e-3, 
-    "gamma": 0.98, 
-    "epsilon": 0.01,
-    "target_update": 30
+    "action_dim": 6,
+    "lr": 1e-2,
+    "gamma": 0.98,
+    "epsilon": 0.1,
+    "target_update": 50
+  },
+
+  "Q_Net":{
+    "fc1_dim": 512,
+    "fc2_dim": 256,
+    "fc3_dim": 128
   },
 
   "trainer":{
-    "episodes_num": 100,
-    "is_on_policy": false
+    "model_path": "Knowledge\\MutilAgentReinforcementLearning\\MultiUAVsCharging\\model",
+
+    "train_episodes": 500,
+    "is_on_policy": false,
+
+    "delay": 0.1,
+    "eval_episodes": 3
   },
 
   "cuav_reward_weights":{
-    "charging": 1.0,
-    "path_efficiency": 0.5,
-    "energy_management": 0.3,
-    "team_contribution": 0.8,
-    "exploration": 0.4,
-    "penalty": 1.0
+    "out_of_bounds": 10.0,
+    "high_battery": 0.5,
+    "battery_danger": 1.2,
+    "return_base": 0.8,
+    "charge_complete": 1.0,
+    
+    "charge_success": 0.2,
+    "task_low_battery": 0.1,
+    
+    "team_safe": 1.0,
+    "time_step": 0.005
   },
 
   "buffer":{
-    "min_size": 100,
-    "batch_size": 64
+    "min_size": 128,
+    "batch_size": 100
   }
 }

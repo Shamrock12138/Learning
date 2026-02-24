@@ -131,26 +131,39 @@ class UAV:
       "steps_since_charge": 0
     }
 
-  def move(self, action:int, grid_size:Tuple[int, int]) -> float:
+  def move(self, action: int, grid_size: Tuple[int, int]) -> Tuple[float, bool]:
     '''
-      执行移动动作，返回移动距离
+      执行移动动作，返回移动距离和是否越界
     '''
     old_pos = self.position.copy()
+    is_out_of_bounds = False
     
+    # 先计算目标位置
+    target_pos = self.position.copy()
     if action == 1:  # 上
-      self.position[1] = min(grid_size[1] - 1, self.position[1] + 1)
+        target_pos[1] = self.position[1] + 1
     elif action == 2:  # 下
-      self.position[1] = max(0, self.position[1] - 1)
+        target_pos[1] = self.position[1] - 1
     elif action == 3:  # 左
-      self.position[0] = max(0, self.position[0] - 1)
+        target_pos[0] = self.position[0] - 1
     elif action == 4:  # 右
-      self.position[0] = min(grid_size[0] - 1, self.position[0] + 1)
+        target_pos[0] = self.position[0] + 1
     # action == 0: 静止，不移动
+
+    # ===== 边界检查（关键修改）=====
+    # 检测是否尝试越界（即使最终被限制，也视为越界尝试）
+    if (target_pos[0] < 0 or target_pos[0] >= grid_size[0] or 
+        target_pos[1] < 0 or target_pos[1] >= grid_size[1]):
+        is_out_of_bounds = True
     
-    # 计算移动距离
-    distance = np.linalg.norm(self.position-old_pos)
+    # 无论是否越界，都限制在边界内
+    self.position[0] = np.clip(self.position[0], 0, grid_size[0] - 1)
+    self.position[1] = np.clip(self.position[1], 0, grid_size[1] - 1)
     
-    return distance
+    # ===== 移动距离计算 =====
+    distance = np.linalg.norm(self.position - old_pos)
+    
+    return distance, is_out_of_bounds
   
   def consume_battery(self, amount:float) -> bool:
     '''
@@ -207,17 +220,21 @@ class Charging_BaseStation(BaseStation):
       检查充电机是否可以充电
     '''
     cuav_position = cuav.position
+    # print(cuav_position, self.position)
+    # print(np.array_equal(np.round(cuav_position).astype(int), 
+    #                   np.round(self.position).astype(int)))
     return np.array_equal(np.round(cuav_position).astype(int), 
                       np.round(self.position).astype(int))
   
-  def provide_charging(self, cuav_battery:float) -> Tuple[float, float]:
+  def provide_charging(self, cuav:'Charging_UAV') -> Tuple[float, float]:
     """
       为充电机提供充电服务，返回(充电量, 新电量)
         params:
           cuav_battery - uav当前电量
     """
-    charge_amount = min(self.charging_rate, 100.0-cuav_battery)
-    new_battery = cuav_battery+charge_amount
+    charge_amount = min(self.charging_rate, 100.0-cuav.battery)
+    new_battery = cuav.battery+charge_amount
+    cuav.battery = new_battery
     return charge_amount, new_battery
   
   def get_info(self) -> Dict[str, Any]:
@@ -232,7 +249,7 @@ class Charging_UAV(UAV):
   '''
   def __init__(self, uav_id:int, position:np.ndarray, battery:float,
                charging_rate:float=10.0, movement_cost:float=1.0,
-               charging_cost_rate:float=0.9) -> None:
+               charging_cost_rate:float=0.9, distance:float=1.0) -> None:
     super().__init__(uav_id, position, battery, uav_type=1)
     utils_autoAssign(self)
 
@@ -240,7 +257,7 @@ class Charging_UAV(UAV):
     if not task_uav.state['alive']:
       return False
     distance = np.sum(np.abs(self.position-task_uav.position))
-    if distance > 1:
+    if distance > self.distance:
       return False
     if self.battery < 10:
       return False
@@ -248,12 +265,13 @@ class Charging_UAV(UAV):
       return False
     return True
   
-  def charge_task_uav(self ,task_uav:'Task_UAV') -> Tuple[float, float]:
+  def charge_task_uav(self, task_uav:'Task_UAV') -> Tuple[float, float]:
     '''
       为任务机充电，返回(充电机消耗电量, 任务机获得电量)
     '''
+    # print('yes')
     if not self.can_charge_task(task_uav):
-      return 0.0, 0.0
+      return -1.0, -1.0
     self.consume_battery(self.charging_rate)
     actual_charge = task_uav.charge_battery(self.charging_rate*self.charging_cost_rate)
     self.state["charging"] = True
