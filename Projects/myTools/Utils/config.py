@@ -1,10 +1,10 @@
-#                           各种配置类
+#                           全局配置类
 #                           2025/10/24
 #                            shamrock
 
 import numpy as np
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from typing import TypedDict
 
 class Sample:
   '''
@@ -50,7 +50,13 @@ class Trajectory:
     self.dones.append(done)
     self.length += 1
 
-
+class SampleBatch(TypedDict):
+  """经验回放缓冲区采样批次的类型定义"""
+  states: np.ndarray      # shape: (batch_size, state_dim)
+  actions: np.ndarray     # shape: (batch_size,) 离散动作 或 (batch_size, action_dim) 连续动作
+  next_states: np.ndarray # shape: (batch_size, state_dim)
+  rewards: np.ndarray     # shape: (batch_size,)
+  dones: np.ndarray       # shape: (batch_size,)
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

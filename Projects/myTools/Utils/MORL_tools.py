@@ -143,7 +143,7 @@ class EQL_Trainer:
     '''
       每次 episode 结束时更新
     '''
-    self.w_kept = None
+    self.agent.w_kept = None
     # 探索率衰减
     self.epsilon -= self.epsilon_delta
     # 同伦优化
