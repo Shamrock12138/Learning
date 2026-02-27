@@ -37,20 +37,21 @@ class Independent_Trainer(RL_TrainerConfig):
     self.name = f'Independent {self.agent.name}'
 
   def update(self, transition_dict):
-    # TODO: 只训练 充电机 
-    # batch_size = transition_dict['states'].shape[0]
-    n_agents = transition_dict['states'].shape[1]
-    losses = np.zeros(n_agents, dtype=float)
-    for agent_idx in range(n_agents):
+    print('update')
+    # n_agents = transition_dict['states'].shape[1]
+    n_cuavs = self.env.n_charging_uavs
+    cuav_losses = np.zeros(n_cuavs, dtype=float)
+    for i in range(n_cuavs):
+      idx = i+n_cuavs
       single_transition = {
-        'states': transition_dict['states'][:, agent_idx, :],         # (B, state_dim)
-        'actions': transition_dict['actions'][:, agent_idx],          # (B,)
-        'next_states': transition_dict['next_states'][:, agent_idx, :],  # (B, state_dim)
-        'rewards': transition_dict['rewards'][:, agent_idx],          # (B,)
+        'states': transition_dict['states'][:, idx, :],         # (B, state_dim)
+        'actions': transition_dict['actions'][:, idx],          # (B,)
+        'next_states': transition_dict['next_states'][:, idx, :],  # (B, state_dim)
+        'rewards': transition_dict['rewards'][:, idx],          # (B,)
         'dones': transition_dict['dones']                             # (B,) 全局done
       }
-      losses[agent_idx] += self.agent.update(single_transition)
-    return np.sum(losses)
+      cuav_losses[i] += self.agent.update(single_transition)
+    return np.sum(cuav_losses)
 
   def take_action(self, state) -> np.ndarray:
     '''
@@ -110,17 +111,10 @@ class Independent_Trainer(RL_TrainerConfig):
           total_rewards = np.zeros(self.agents_num)
           loss = 0
           while not done:
-            # actions = np.array([self.agent.take_action(state[i])
-            #   for i in range(self.agents_num)])
             actions = self.take_action(state)
             next_state, reward, done, _ = self.env.step(actions)
             n_charging_uavs = self.env.n_charging_uavs
-            # print(state, actions, reward, next_state, done)
-            replay_buffer.add_sample(Sample(state, 
-                                            actions, 
-                                            reward, 
-                                            next_state,
-                                            done))
+            replay_buffer.add_sample(Sample(state, actions, reward, next_state, done))
             state = next_state
             total_rewards += reward
             if len(replay_buffer) > self.min_size:
@@ -132,9 +126,9 @@ class Independent_Trainer(RL_TrainerConfig):
           if (episode+1)%100 == 0:
             print('\nmean rewards: ', np.mean(history['rewards'][-100:]))
             print('mean losss: ', np.mean(history['loss'][-100:]))
-            history['rewards'].clear()
-            history['loss'].clear()
             self.agent.save_model(self.model_path, f'\{self.agent.name}_{episode+begin}.pt')
+    utils_showHistory(history, list(history.keys()), 'test', 'eps', 
+                      'reward', self.history_path+f'\{self.agent.name}.png')
     return history
 
   def eval(self, model_name=None) -> Dict[str, Any]:
@@ -220,4 +214,4 @@ class Independent_Trainer(RL_TrainerConfig):
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
 # .-'  `) |  | |  | \ '-'  | |  |  |  | |  |    ' '-' ' \ `--. |  \  \  
-# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--' 
+# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--'

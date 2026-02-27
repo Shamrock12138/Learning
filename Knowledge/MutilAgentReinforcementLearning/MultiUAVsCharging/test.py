@@ -16,9 +16,7 @@ agent = Independent_Trainer(DoubleDQN, config_path, agents_num, env, device)
 replay_buffer = utils_ReplayBuffer(10000)
 
 if __name__ == "__main__":
-  # TODO 1.表格记录有问题 2.render不动
-  history = agent.train(replay_buffer=replay_buffer)
-  utils_showHistory(history, list(history.keys()), 'test', 'eps', 'reward')
+  agent.train(replay_buffer=replay_buffer)
   agent.eval()
   # num = 0
   # agent.eval(f'\Double_DQN_{num}.pt')

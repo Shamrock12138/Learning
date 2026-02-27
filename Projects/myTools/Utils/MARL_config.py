@@ -157,8 +157,8 @@ class UAV:
         is_out_of_bounds = True
     
     # 无论是否越界，都限制在边界内
-    self.position[0] = np.clip(self.position[0], 0, grid_size[0] - 1)
-    self.position[1] = np.clip(self.position[1], 0, grid_size[1] - 1)
+    self.position[0] = np.clip(target_pos[0], 0, grid_size[0] - 1)
+    self.position[1] = np.clip(target_pos[1], 0, grid_size[1] - 1)
     
     # ===== 移动距离计算 =====
     distance = np.linalg.norm(self.position - old_pos)
@@ -203,112 +203,6 @@ class UAV:
       "battery": self.battery,
       "alive": self.state["alive"],
     }
-
-#---------------------- 多无人机充电场景 -------------------------
-#                         2026/2/18
-
-class Charging_BaseStation(BaseStation):
-  '''
-    充电基站类
-  '''
-  def __init__(self, position: Tuple[int], charging_rate:float):
-    super().__init__(position)
-    self.charging_rate = charging_rate
-
-  def can_charge(self, cuav:'Charging_UAV') -> bool:
-    '''
-      检查充电机是否可以充电
-    '''
-    cuav_position = cuav.position
-    # print(cuav_position, self.position)
-    # print(np.array_equal(np.round(cuav_position).astype(int), 
-    #                   np.round(self.position).astype(int)))
-    return np.array_equal(np.round(cuav_position).astype(int), 
-                      np.round(self.position).astype(int))
-  
-  def provide_charging(self, cuav:'Charging_UAV') -> Tuple[float, float]:
-    """
-      为充电机提供充电服务，返回(充电量, 新电量)
-        params:
-          cuav_battery - uav当前电量
-    """
-    charge_amount = min(self.charging_rate, 100.0-cuav.battery)
-    new_battery = cuav.battery+charge_amount
-    cuav.battery = new_battery
-    return charge_amount, new_battery
-  
-  def get_info(self) -> Dict[str, Any]:
-    return {
-      "position": tuple(self.position),
-      "charging_rate": self.charging_rate
-    }
-
-class Charging_UAV(UAV):
-  '''
-    充电无人机类
-  '''
-  def __init__(self, uav_id:int, position:np.ndarray, battery:float,
-               charging_rate:float=10.0, movement_cost:float=1.0,
-               charging_cost_rate:float=0.9, distance:float=1.0) -> None:
-    super().__init__(uav_id, position, battery, uav_type=1)
-    utils_autoAssign(self)
-
-  def can_charge_task(self, task_uav:'Task_UAV') -> bool:
-    if not task_uav.state['alive']:
-      return False
-    distance = np.sum(np.abs(self.position-task_uav.position))
-    if distance > self.distance:
-      return False
-    if self.battery < 10:
-      return False
-    if task_uav.battery >= 100:
-      return False
-    return True
-  
-  def charge_task_uav(self, task_uav:'Task_UAV') -> Tuple[float, float]:
-    '''
-      为任务机充电，返回(充电机消耗电量, 任务机获得电量)
-    '''
-    # print('yes')
-    if not self.can_charge_task(task_uav):
-      return -1.0, -1.0
-    self.consume_battery(self.charging_rate)
-    actual_charge = task_uav.charge_battery(self.charging_rate*self.charging_cost_rate)
-    self.state["charging"] = True
-    task_uav.state["charging"] = True
-    return self.charging_rate, actual_charge
-  
-  def navigate_to_target(self, target_position:np.ndarray) -> int:
-    '''
-      导航到目标位置
-    '''
-    tx, ty = target_position
-    cx, cy = self.position
-    if cx < tx:
-      return 4  # 右
-    elif cx > tx:
-      return 3  # 左
-    elif cy < ty:
-      return 1  # 上
-    elif cy > ty:
-      return 2  # 下
-    else:
-      return 0  # 已到达
-
-class Task_UAV(UAV):
-  '''
-    任务无人机类
-  '''
-  def __init__(self, uav_id:int, position:np.ndarray, battery:float,
-               movement_cost:float=1.0) -> None:
-    super().__init__(uav_id, position, battery, uav_type=0)
-    utils_autoAssign(self)
-
-  def random_action(self) -> int:
-    '''
-      生成随机动作
-    '''
-    return random.randint(0, 4)
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  

@@ -1,0 +1,49 @@
+{
+  "env": {
+    "max_steps": 200,
+    "n_task_uavs": 1,
+    "n_charging_uavs": 1,
+    "state_dim": 4,
+    "action_dim": 6,
+    "distance": 1.0
+  },
+  "model": {
+    "state_dim": 13,
+    "action_dim": 6,
+    "lr": 0.01,
+    "gamma": 0.98,
+    "epsilon": 0.1,
+    "target_update": 50
+  },
+  "Q_Net": {
+    "fc1_dim": 128,
+    "fc2_dim": 256,
+    "fc3_dim": 128
+  },
+  "trainer": {
+    "history_path": "Projects/Demo/history",
+    "model_path": "Projects/Demo/model",
+    "train_episodes": 300,
+    "is_on_policy": false,
+    "delay": 0.1,
+    "eval_episodes": 5
+  },
+  "cuav_reward_weights": {
+    "out_of_bounds": 10.0,
+    "high_battery": 0.5,
+    "battery_danger": 1.0,
+    "battery_dead": 50.0,
+    "return_base": 2.0,
+    "charge_complete": 10.0,
+    "dist_to_base": 0.01,
+    "charge_success": 15.0,
+    "task_low_battery": 10.0,
+    "team_safe": 100.0,
+    "time_step": 0.001
+  },
+  "buffer": {
+    "buffer_size": 10000,
+    "min_size": 128,
+    "batch_size": 64
+  }
+}

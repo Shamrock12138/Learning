@@ -6,9 +6,113 @@ from collections import defaultdict
 import torch.nn.functional as F
 
 from myTools.Utils.tools import *
+from myTools.Utils.MARL_config import *
 
 #---------------------- 多无人机充电 -------------------------
 #                          2026/2/21
+
+class Charging_BaseStation(BaseStation):
+  '''
+    充电基站类
+  '''
+  def __init__(self, position: Tuple[int], charging_rate:float):
+    super().__init__(position)
+    self.charging_rate = charging_rate
+
+  def can_charge(self, cuav:'Charging_UAV') -> bool:
+    '''
+      检查充电机是否可以充电
+    '''
+    cuav_position = cuav.position
+    # print(cuav_position, self.position)
+    # print(np.array_equal(np.round(cuav_position).astype(int), 
+    #                   np.round(self.position).astype(int)))
+    return np.array_equal(np.round(cuav_position).astype(int), 
+                      np.round(self.position).astype(int))
+  
+  def provide_charging(self, cuav:'Charging_UAV') -> Tuple[float, float]:
+    """
+      为充电机提供充电服务，返回(充电量, 新电量)
+        params:
+          cuav_battery - uav当前电量
+    """
+    charge_amount = min(self.charging_rate, 100.0-cuav.battery)
+    new_battery = cuav.battery+charge_amount
+    cuav.battery = new_battery
+    return charge_amount, new_battery
+  
+  def get_info(self) -> Dict[str, Any]:
+    return {
+      "position": tuple(self.position),
+      "charging_rate": self.charging_rate
+    }
+
+class Charging_UAV(UAV):
+  '''
+    充电无人机类
+  '''
+  def __init__(self, uav_id:int, position:np.ndarray, battery:float,
+               charging_rate:float=10.0, movement_cost:float=1.0,
+               charging_cost_rate:float=0.9, distance:float=1.0) -> None:
+    super().__init__(uav_id, position, battery, uav_type=1)
+    utils_autoAssign(self)
+
+  def can_charge_task(self, task_uav:'Task_UAV') -> bool:
+    if not task_uav.state['alive']:
+      return False
+    distance = np.sum(np.abs(self.position-task_uav.position))
+    if distance > self.distance:
+      return False
+    if self.battery < 10:
+      return False
+    if task_uav.battery >= 100:
+      return False
+    return True
+  
+  def charge_task_uav(self, task_uav:'Task_UAV') -> Tuple[float, float]:
+    '''
+      为任务机充电，返回(充电机消耗电量, 任务机获得电量)
+    '''
+    # print('yes')
+    if not self.can_charge_task(task_uav):
+      return -1.0, -1.0
+    self.consume_battery(self.charging_rate)
+    actual_charge = task_uav.charge_battery(self.charging_rate*self.charging_cost_rate)
+    self.state["charging"] = True
+    task_uav.state["charging"] = True
+    return self.charging_rate, actual_charge
+  
+  def navigate_to_target(self, target_position:np.ndarray) -> int:
+    '''
+      导航到目标位置
+    '''
+    tx, ty = target_position
+    cx, cy = self.position
+    if cx < tx:
+      return 4  # 右
+    elif cx > tx:
+      return 3  # 左
+    elif cy < ty:
+      return 1  # 上
+    elif cy > ty:
+      return 2  # 下
+    else:
+      return 0  # 已到达
+
+class Task_UAV(UAV):
+  '''
+    任务无人机类
+  '''
+  def __init__(self, uav_id:int, position:np.ndarray, battery:float,
+               movement_cost:float=0.5) -> None:  # 默认移动消耗0.5电量
+    super().__init__(uav_id, position, battery, uav_type=0)
+    utils_autoAssign(self)
+
+  def random_action(self) -> int:
+    '''
+      生成随机动作
+    '''
+    return random.randint(0, 4)
 
 class Charging_UAVs_Rewards:
   '''
@@ -59,83 +163,105 @@ class Charging_UAVs_Rewards:
     n = self.n
     rewards = np.zeros(n)
 
-    # ===== 0. 边界判定（首要安全检查）=====
+    cuav_batteries = cuav_states[:, 2]
+    cuav_positions = cuav_states[:, :2]
 
+    dist_to_base = np.linalg.norm(cuav_positions - base_position, axis=1)
+    at_base = dist_to_base < 1.5  # 距离基站 1.5 格内视为到达
+
+    # ===== 0. 边界判定（首要安全检查）=====
     if np.any(is_out_of_bounds):
-      print('out bounds')
       rewards[is_out_of_bounds] -= self.weights['out_of_bounds']
     
     # ===== 1. 自身电量充沛奖励（首要目标）=====
-    cuav_batteries = cuav_states[:, 2]
-    
-    # 电量高时给予正奖励（首要目标）
-    high_battery = (cuav_batteries > 0.8)
-    rewards[high_battery] += self.weights['high_battery']  # 0.5
-    
-    # 电量中等时中性（0）
-    # 电量低时给予惩罚（见第2部分）
+
     
     # ===== 2. 自身电量安全惩罚（强化首要目标）=====
-    # 定义安全阈值
-    safety_threshold = 0.7  # 70% 以上视为安全
-    critical_threshold = 0.2  # 20% 以下为极度危险
+    # 2.1 高电量奖励（鼓励保持电量充足）
+    high_battery_mask = (cuav_batteries > 0.8)
+    rewards[high_battery_mask] += self.weights['high_battery']  # +0.5
     
-    # 电量危险系数 (0~1)：越低越危险
-    battery_danger = np.maximum(0, (safety_threshold - cuav_batteries) / safety_threshold)
+    # 2.2 低电量惩罚（随危险程度递增）
+    low_battery_mask = (cuav_batteries < 0.3)
+    battery_danger = np.maximum(0, (0.3 - cuav_batteries) / 0.3)  # 0~1
+    rewards[low_battery_mask] -= self.weights['battery_danger'] * battery_danger  # 最大 -1.0
     
-    # 大幅增加低电量惩罚（惩罚强度与危险程度成正比）
-    # 电量 70% → 0, 50% → 0.3, 30% → 0.6, 20% → 0.7, 10% → 0.85, 0% → 1.0
-    rewards -= self.weights['battery_danger'] * battery_danger
+    # 2.3 电量耗尽惩罚（最严重）
+    dead_mask = (cuav_batteries <= 0)
+    rewards[dead_mask] -= self.weights['battery_dead']  # -50.0
     
     # ===== 3. 基站充电奖励（强化返航行为）=====
-    current_pos = cuav_states[:, :2]
-    at_base = np.all(np.abs(current_pos - base_position) < 1e-5, axis=1)
+    # 3.1 低电量时靠近基站奖励（引导返航）
+    need_charge_mask = (cuav_batteries < 0.4) & at_base
+    if np.any(need_charge_mask):
+        urgency = (0.4 - cuav_batteries[need_charge_mask]) / 0.4  # 电量越低越紧急
+        rewards[need_charge_mask] += self.weights['return_base'] * (1.0 + urgency)  # +1.0~2.0
     
-    # 1. 低电量时返航奖励（鼓励及时返航）
-    low_battery = (cuav_batteries < 0.3)
-    return_base_reward = at_base & low_battery
-    if np.any(return_base_reward):
-        # 电量越低，奖励越大
-        urgency = (0.3 - cuav_batteries[return_base_reward]) / 0.3
-        rewards[return_base_reward] += self.weights['return_base'] * (0.8 + 0.2 * urgency)
-    
-    # 2. 充电完成奖励（完成充电后）
+    # 3.2 成功在基站充电奖励（使用缓存对比）
     if self.last_cuav_batteries is not None:
-        # 之前电量低 (<30%)，现在电量高 (>70%)，且在基站
-        charged_at_base = at_base & \
-                         (cuav_batteries > 0.7) & \
-                         (self.last_cuav_batteries < 0.3)
-        rewards[charged_at_base] += self.weights['charge_complete']
+        # 之前低电量 (<30%)，现在高电量 (>70%)，且在基站 = 成功充电
+        charged_success = cuav_batteries > self.last_cuav_batteries
+        if np.any(charged_success):
+            print("yes")
+            rewards[charged_success] += self.weights['charge_complete']  # +5.0
     
-    # 更新缓存
+    # 更新电量缓存（用于下次判断是否完成充电）
     self.last_cuav_batteries = cuav_batteries.copy()
     
-    # ===== 4. 任务机充电奖励（次要目标）=====
-    valid_target_mask = (target_tasks[:, 4] != -1)
+    # 3.3 距离基站越近奖励（连续引导）
+    # 只在需要充电时生效，避免一直待在基站
+    if np.any(need_charge_mask):
+        dist_reward = -dist_to_base * self.weights['dist_to_base']  # -0.01 * dist
+        rewards[need_charge_mask] += dist_reward
     
-    # 1. 充电成功奖励（小幅奖励，避免过度关注任务机）
-    charge_event = valid_target_mask & charging_mask
-    if np.any(charge_event):
-        rewards[charge_event] += self.weights['charge_success']  # 0.2 (降低！)
+    # # ===== 4. 任务机充电奖励（次要目标）=====
+    # valid_target_mask = (target_tasks[:, 4] != -1)
     
-    # 2. 低电量任务机惩罚（小幅惩罚，避免完全忽视任务机）
-    if np.any(valid_target_mask):
-        target_batteries = target_tasks[:, 2]
-        critical_mask = valid_target_mask & (target_batteries < 0.1)
-        if np.any(critical_mask):
-            rewards[critical_mask] -= self.weights['task_low_battery']  # 0.1 (小幅)
+    # # 1. 充电成功奖励（小幅奖励，避免过度关注任务机）
+    # charge_event = valid_target_mask & charging_mask
+    # if np.any(charge_event):
+    #     rewards[charge_event] += self.weights['charge_success']  # 0.2 (降低！)
+    
+    # # 2. 低电量任务机惩罚（小幅惩罚，避免完全忽视任务机）
+    # if np.any(valid_target_mask):
+    #     target_batteries = target_tasks[:, 2]
+    #     critical_mask = valid_target_mask & (target_batteries < 0.1)
+    #     if np.any(critical_mask):
+    #         rewards[critical_mask] -= self.weights['task_low_battery']  # 0.1 (小幅)
+    
+    # ===== 4. 任务机充电奖励（关键行为奖励）=====
+    # 4.1 任务机充电成功奖励（大幅奖励，鼓励充电行为）
+    if np.any(charging_mask):
+        rewards[charging_mask] += self.weights['charge_success']  # +5.0
+    
+    # 4.2 低电量任务机接近奖励（鼓励前往低电量任务机）
+    for i, cuav_state in enumerate(cuav_states):
+        if not alive_task_mask.any():  # 如果所有任务机都死亡，跳过此部分
+            continue
+            
+        # 查找最近的低电量任务机
+        for j, task_alive in enumerate(alive_task_mask):
+            if not task_alive:
+                continue
+            task_state = target_tasks[j]
+            if task_state[2] < 0.4:  # 任务机电量低于40%
+                # 计算充电机与低电量任务机的距离
+                dist_to_task = np.linalg.norm(cuav_positions[i] - task_state[:2])
+                if dist_to_task < 5.0:  # 扩大影响范围到5格
+                    proximity_bonus = (5.0 - dist_to_task) * 0.3  # 距离越近奖励越大，调整系数
+                    rewards[i] += proximity_bonus
     
     # ===== 5. 其他惩罚 =====
     # 1. 时间步惩罚（小幅）
-    rewards -= self.weights['time_step']  # 0.005 (降低)
+    rewards -= self.weights['time_step']  # 0.001 (降低)
     
-    # 2. 任务机坠毁惩罚（保持）
+    # 2. 任务机坠毁惩罚（严厉惩罚，因为保护任务机是主要目标）
     if dead_task_count > 0:
         team_penalty = (dead_task_count * self.weights['team_safe']) / n
         rewards -= team_penalty
     
     # ===== 6. 奖励裁剪（防止极端值）=====
-    rewards = np.clip(rewards, -1.5, 1.5)
+    # rewards = np.clip(rewards, -5.0, 5.0)
     
     return rewards
 
@@ -178,4 +304,4 @@ class Q_Net(torch.nn.Module):
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
 # .-'  `) |  | |  | \ '-'  | |  |  |  | |  |    ' '-' ' \ `--. |  \  \  
-# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--' 
+# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--'

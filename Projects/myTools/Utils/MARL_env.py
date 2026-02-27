@@ -81,7 +81,7 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         uav_id=i,
         position=np.array(pos, dtype=np.float32),
         battery=battery,
-        movement_cost=2.0
+        movement_cost=0.5  # 任务机每步移动消耗0.5电量
       )
       self.task_uavs.append(task_uav)
     
@@ -174,7 +174,7 @@ class MARL_Env_UAVs(MARL_EnvConfig):
     for idx, task_uav in enumerate(self.task_uavs):
       if not task_uav.state['alive']:
         continue
-      if task_uav.battery <= 60:
+      if task_uav.battery <= 60 and cuav.can_charge_task(task_uav):
         target_idx.append(idx)
     return target_idx
   
@@ -228,6 +228,7 @@ class MARL_Env_UAVs(MARL_EnvConfig):
       检查终止条件
     '''
     any_dead = any(not t.state['alive'] for t in self.task_uavs)
+    any_dead |= any(not c.state['alive'] for c in self.charging_uavs)
     max_steps_reached = self.step_count >= self.max_steps
     return any_dead or max_steps_reached
 
@@ -263,22 +264,22 @@ class MARL_Env_UAVs(MARL_EnvConfig):
       global_idx = self.n_task_uavs+i
       action = int(actions[global_idx])
       # print(action)
-      # 基站充电
-      if self.base_station.can_charge(cuav) and action == 0:
-        # print('no')
-        charge_amount, new_battery = self.base_station.provide_charging(cuav)
-        cuav.battery = new_battery
-        info["charging_events"]["base"] += 1
-        continue
-      # 充电模式
+      # 充电模式 - 优先处理充电任务
       if action == 5:
         is_charging, charge_amount = self._handle_charging_mode(cuav)
         if is_charging:
           charging_mask[i] = True
           charged_amount[i] = charge_amount
         continue
+      # 基站充电
+      elif self.base_station.can_charge(cuav) and action == 0:
+        # print('no')
+        charge_amount, new_battery = self.base_station.provide_charging(cuav)
+        cuav.battery = new_battery
+        info["charging_events"]["base"] += 1
+        continue
       # 正常移动
-      if action != 0:
+      elif action != 0:
         _, info["is_out_of_bounds"][i] = cuav.move(action, self.grid_size)
         cuav.consume_battery(cuav.movement_cost)
     
@@ -292,7 +293,10 @@ class MARL_Env_UAVs(MARL_EnvConfig):
         action = int(actions[i])
         if action != 0:
           task_uav.move(action, self.grid_size)
+          # 移动时消耗电量
           task_uav.consume_battery(task_uav.movement_cost)
+        # 无论是否移动，每步都消耗基础电量
+        task_uav.consume_battery(0.2)  # 每步消耗0.2电量，降低消耗率
 
     rewards = self._compute_rewards(charging_mask, charged_amount, info)
     self.done = self._check_termination()
@@ -572,5 +576,4 @@ class MARL_Env_UAVs(MARL_EnvConfig):
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
 # .-'  `) |  | |  | \ '-'  | |  |  |  | |  |    ' '-' ' \ `--. |  \  \  
-# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--' 
-
+# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--'
