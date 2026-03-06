@@ -247,23 +247,33 @@ class SARSA_nstep(RL_Model):
 #                        2025/12/8
 
 class Q_Learning(RL_Model):
-  def __init__(self, env:ENV_INFO, epsilon, alpha, gamma):
+  def __init__(self, state_dim, action_dim, device, config:dict):
     super().__init__()
-    self.env = env
-    self.alpha = alpha
-    self.gamma = gamma
-    self.epsilon = epsilon
-
-    self.Q = np.zeros((env._states_num, env._actions_num))
-    self.pi = np.zeros((env._states_num, env._actions_num))
+    utils_setAttr(self, config)
+    utils_autoAssign(self)
+    
+    self.Q = np.zeros((state_dim, action_dim))
+    self.pi = np.zeros((state_dim, action_dim))
+    self.name = 'Q_Learning'
+    self.is_on_policy = False
+    
+    self.history = []
 
   def take_action(self, state):
     argmax_action = np.argmax(self.Q[state])
     return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
   
-  def update(self, s0, a0, r, s1):
-    td_error = r+self.gamma*self.Q[s1].max()-self.Q[s0, a0]
-    self.Q[s0, a0] += self.alpha*td_error
+  def update(self, transition_dict):
+    states = np.array(transition_dict['states'])
+    actions = np.array(transition_dict['actions'])
+    next_states = np.array(transition_dict['next_states'])
+    rewards = np.array(transition_dict['rewards'])
+    dones = np.array(transition_dict['dones'])
+    
+    for i in range(len(states)):
+      s0, a0, r, s1 = states[i], actions[i], rewards[i], next_states[i]
+      td_error = r + self.gamma * self.Q[s1].max() - self.Q[s0, a0]
+      self.Q[s0, a0] += self.alpha * td_error
 
   def get_policy(self):
     for state in range(self.env._states_num):
@@ -273,48 +283,51 @@ class Q_Learning(RL_Model):
           self.pi[state, i] = 1
     return self.pi
 
-  @utils_timer
-  def run(self, episodes=None, diff_tol=1e-6, quit_cnt=5):
-    '''
-      params:
-        episodes - 
-          None时，提前停止，使用 diff_tol quit_cnt 参数
-          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
-        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
-        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
-    '''
-    if episodes is not None:
-      for episode in range(episodes):
-        state, _ = self.env.reset()
-        done = False
-        while not done:
-          action = self.take_action(state)
-          n_state, reward, done, _ = self.env.step(action)
-          self.update(state, action, reward, n_state)
-          state = n_state
-    else:
-      times, cnt = 0, 0
-      while True:
-        times += 1
-        last_Q = self.Q.copy()
-        state, _ = self.env.reset()
-        done = False
-        while not done:
-          action = self.take_action(state)
-          n_state, reward, done, _ = self.env.step(action)
-          self.update(state, action, reward, n_state)
-          state = n_state
-        current_Q = self.Q.copy()
-        Q_diff = np.abs(current_Q-last_Q).sum()
-        # print(f'Q Δ = {Q_diff:.6f}')
-        if Q_diff < diff_tol:
-          cnt += 1
-          if cnt > quit_cnt:
-            print(f'Finished after {times} times.')
-            break
-        else:
-          cnt = 0
-    self.get_policy()
+  def save_model(self, dir_path, name):
+    path = dir_path + name
+    checkpoint = {
+      'Q_table': self.Q,
+      'policy': self.pi
+    }
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
+
+  def load_model(self, dir_path, name):
+    path = dir_path + name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, weights_only=True)
+    self.Q = checkpoint['Q_table']
+    self.pi = checkpoint['policy']
+    print(f"Model loaded from {path}")
+
+  # @utils_timer
+  # def train(self, episodes=None):
+  #   if episodes is not None:
+  #     pbar = tqdm(iterable=range(episodes), desc='Q_Learning Iterable')
+  #     for _ in pbar:
+  #       state, _ = self.env.reset()
+  #       done = False
+  #       episode_reward = 0
+  #       while not done:
+  #         action = self.take_action(state)
+  #         n_state, reward, done, _ = self.env.step(action)
+          
+  #         # 存储经验
+  #         transition_dict = {
+  #           'states': [state],
+  #           'actions': [action],
+  #           'rewards': [reward],
+  #           'next_states': [n_state],
+  #           'dones': [done]
+  #         }
+  #         self.update(transition_dict)
+          
+  #         episode_reward += reward
+  #         state = n_state
+  #       self.history.append(episode_reward)
+  #   self.get_policy()
 
 #---------------------- Dyna_Q -------------------------
 #                      2025/12/8
@@ -469,26 +482,25 @@ class DQN(RL_Model):
 #                        2025/12/25
 
 class DoubleDQN(RL_Model):
-  def __init__(self, state_dim, action_dim, lr, gamma, epsilon,
-               target_update, 
-               Q_Net:torch.nn.Module, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
     '''
       params:
-        state_dim, hidden_dim, action_dim - 维度
+        state_dim, action_dim - 状态空间、动作空间维度
         lr, gamma - learning rate, gamma
         epsilon - epsilon-greedy
         target_update - 目标网络更新频率
-        Q_Net - torch.nn.Module 提供输入和输出尺寸
         device - device
     '''
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
 
-    self.q_net = Q_Net.to(device)
-    self.target_q_net = Q_Net.to(device)
-    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+    self.q_net = QNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.target_q_net = QNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=self.lr)
     self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'Double_DQN'
+    self.is_on_policy = False
 
     self.counter = 0
     self.history = []
@@ -498,7 +510,7 @@ class DoubleDQN(RL_Model):
     argmax_action = self.q_net(state).argmax().item()
     return RTools_epsilon(self.epsilon, self.action_dim, argmax_action)
   
-  def update(self, transition_dict):
+  def update(self, transition_dict:SampleBatch):
     states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
     actions = torch.as_tensor(transition_dict['actions'], dtype=torch.long, device=self.device).view(-1, 1)
     next_states = torch.as_tensor(transition_dict['next_states'], dtype=torch.float32, device=self.device)
@@ -509,7 +521,7 @@ class DoubleDQN(RL_Model):
     max_action = self.q_net(next_states).max(1)[1].view(-1, 1)
     max_next_q_values = self.target_q_net(next_states).gather(1, max_action)
     q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
-    dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
+    dqn_loss = F.mse_loss(q_value, q_target)
 
     self.optimizer.zero_grad()
     dqn_loss.backward()
@@ -518,83 +530,41 @@ class DoubleDQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
-    return dqn_loss.item()
-
-  # def show_history(self, save_dir=None, name=None):
-  #   path = save_dir+name if save_dir and name else None
-  #   utils_showHistory(self.history, 'Double DQN on {}'.format(self.env.name), 
-  #                     'Episodes', 'Returns', path)
-
-  # def render(self, times:int=1):
-  #   '''
-  #     渲染 times 趟动画
-  #   '''
-  #   self.env.eval()
-  #   pbar = tqdm(iterable=range(times), desc='test')
-  #   for T in pbar:
-  #     done = False
-  #     state, _ = self.env.reset()
-  #     self.env.render()
-  #     time.sleep(0.02)
-  #     while not done:
-  #       action = self.take_action(state)
-  #       state, _, done, _ = self.env.step(action)
-  #       self.env.render()
-  #       time.sleep(1/60)
-
   def save_model(self, dir_path, name):
+    path = dir_path+name
     checkpoint = {
       'q_net_state': self.q_net.state_dict(),
       'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    utils_saveModel(dir_path, name, checkpoint)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
 
   def load_model(self, dir_path, name):
-    checkpoint = utils_loadModel(dir_path, name, self.device)
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-
-  # @utils_timer
-  # def run(self, episodes=None):
-  #   '''
-  #     params:
-  #       episodes - 
-  #         None时，提前停止，使用 diff_tol quit_cnt 参数
-  #         int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
-  #       diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
-  #       quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
-  #   '''
-  #   pbar = tqdm(iterable=range(episodes), desc='DDQN Iterable')
-  #   for _ in pbar:
-  #     state, _ = self.env.reset()
-  #     done = False
-  #     episode = 0
-  #     while not done:
-  #       action = self.take_action(state)
-  #       n_state, reward, done, _ = self.env.step(action)
-  #       self.replay_buffer.add(state, action, reward, n_state, done)
-  #       episode += reward
-  #       if self.replay_buffer.size() > 100:
-  #         transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
-  #         self.update(transition_dict)
-  #       state = n_state
-  #     self.history.append(episode)
+    print(f"Model loaded from {path}")
 
 #---------------------- Dueling DQN -------------------------
 #                        2026/1/11
 
 class DuelingDQN(RL_Model):
-  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
-               target_update, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
 
-    self.q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
-    self.target_q_net = VAnet(state_dim, hidden_dim, action_dim).to(device)
-    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+    self.q_net = VAnet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.target_q_net = VAnet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=self.lr)
     self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'Dueling_DQN'
+    self.is_on_policy = False
 
     self.counter = 0
     self.history = []
@@ -602,19 +572,19 @@ class DuelingDQN(RL_Model):
   def take_action(self, state):
     state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
     argmax_action = self.q_net(state).argmax().item()
-    return RTools_epsilon(self.epsilon, self.env._actions_num, argmax_action)
+    return RTools_epsilon(self.epsilon, self.action_dim, argmax_action)
   
-  def update(self, transition_dict):
-    states = torch.tensor(transition_dict['states'], dtype=torch.float).to(self.device)
-    actions = torch.tensor(transition_dict['actions']).view(-1, 1).to(self.device)
-    rewards = torch.tensor(transition_dict['rewards'], dtype=torch.float).view(-1, 1).to(self.device)
-    next_states = torch.tensor(transition_dict['next_states'], dtype=torch.float).to(self.device)
-    dones = torch.tensor(transition_dict['dones'], dtype=torch.float).view(-1, 1).to(self.device)
+  def update(self, transition_dict:SampleBatch):
+    states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
+    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.long, device=self.device).view(-1, 1)
+    next_states = torch.as_tensor(transition_dict['next_states'], dtype=torch.float32, device=self.device)
+    rewards = torch.as_tensor(transition_dict['rewards'], dtype=torch.float32, device=self.device).view(-1, 1)
+    dones = torch.as_tensor(transition_dict['dones'], dtype=torch.float32, device=self.device).view(-1, 1)
 
     q_value = self.q_net(states).gather(1, actions)   # Q(s, a) -> n_s
     max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
     q_target = rewards+self.gamma*max_next_q_values*(1-dones)  # Q*(n_s, max_a)
-    dqn_loss = torch.mean(F.mse_loss(q_value, q_target))
+    dqn_loss = F.mse_loss(q_value, q_target)
 
     self.optimizer.zero_grad()
     dqn_loss.backward()
@@ -623,87 +593,56 @@ class DuelingDQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
-  def show_history(self, save_dir=None, name=None):
-    path = save_dir+name if save_dir and name else None
-    utils_showHistory(self.history, 'Dueling DQN on {}'.format(self.env.name), 
-                      'Episodes', 'Returns', path)
-
-  def render(self, times:int=1):
-    '''
-      渲染 times 趟动画
-    '''
-    self.env.eval()
-    pbar = tqdm(iterable=range(times), desc='test')
-    for T in pbar:
-      done = False
-      state, _ = self.env.reset()
-      self.env.render()
-      time.sleep(0.02)
-      while not done:
-        action = self.take_action(state)
-        state, _, done, _ = self.env.step(action)
-        self.env.render()
-        time.sleep(1/60)
-
   def save_model(self, dir_path, name):
+    path = dir_path+name
     checkpoint = {
       'q_net_state': self.q_net.state_dict(),
       'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    utils_saveModel(dir_path, name, checkpoint)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
 
   def load_model(self, dir_path, name):
-    checkpoint = utils_loadModel(dir_path, name, self.device)
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-
-  @utils_timer
-  def run(self, episodes=None):
-    '''
-      params:
-        episodes - 
-          None时，提前停止，使用 diff_tol quit_cnt 参数
-          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
-        diff_tol: float - 当 差异 大于 diff_tol 时，退出计数+1
-        quit_cnt: int - 退出计数，当退出计数达到 quit_cnt 时，提前停止
-    '''
-    pbar = tqdm(iterable=range(episodes), desc='DDQN Iterable')
-    for _ in pbar:
-      state, _ = self.env.reset()
-      done = False
-      episode = 0
-      while not done:
-        action = self.take_action(state)
-        n_state, reward, done, _ = self.env.step(action)
-        self.replay_buffer.add(state, action, reward, n_state, done)
-        episode += reward
-        if self.replay_buffer.size() > 100:
-          transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
-          self.update(transition_dict)
-        state = n_state
-      self.history.append(episode)
+    print(f"Model loaded from {path}")
 
 #---------------------- REINFORCE -------------------------
 #                        2026/1/14
 
 class REINFORCE(RL_Model):
-  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, lr, gamma, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
+    '''
+      params:
+        state_dim, action_dim - 状态空间、动作空间维度
+        lr, gamma - learning rate, gamma
+        device - device
+    '''
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
-    self.policy_net = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
-    self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr)
+
+    self.policy_net = PolicyNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.lr)
     self.name = 'REINFORCE'
+    self.is_on_policy = True
+
     self.history = []
 
   def take_action(self, state):
-    state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+    state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
     probs = self.policy_net(state)
     action_dist = torch.distributions.Categorical(probs)
     action = action_dist.sample()
     return action.item()
   
-  def update(self, transition_dict):
+  def update(self, transition_dict:SampleBatch):
     reward_list = transition_dict['rewards']
     state_list = transition_dict['states']
     action_list = transition_dict['actions']
@@ -712,52 +651,33 @@ class REINFORCE(RL_Model):
     self.optimizer.zero_grad()
     for i in reversed(range(len(reward_list))):
       reward = reward_list[i]
-      state = torch.tensor(np.array([state_list[i]]), dtype=torch.float).to(self.device)
-      action = torch.tensor(np.array([action_list[i]])).view(-1, 1).to(self.device)
+      state = torch.FloatTensor(np.array([state_list[i]])).to(self.device)
+      action = torch.LongTensor(np.array([[action_list[i]]])).to(self.device)
       log_prob = torch.log(self.policy_net(state).gather(1, action))
       G = self.gamma*G+reward
       loss = -log_prob*G
       loss.backward()
     self.optimizer.step()
 
-  def show_history(self, save_dir=None, name=None):
-    path = save_dir+name if save_dir and name else None
-    utils_showHistory(self.history, self.name+' on '+self.env.name, 
-                      'Episodes', 'Returns', path)
-
-  def render(self, times:int=1):
-    '''
-      渲染 times 趟动画
-    '''
-    self.env.eval()
-    pbar = tqdm(iterable=range(times), desc='test')
-    for T in pbar:
-      done = False
-      state, _ = self.env.reset()
-      self.env.render()
-      time.sleep(0.02)
-      while not done:
-        action = self.take_action(state)
-        state, _, done, _ = self.env.step(action)
-        self.env.render()
-        time.sleep(1/60)
-
   def save_model(self, dir_path, name):
+    path = dir_path+name
     checkpoint = {
       'policy_net_state': self.policy_net.state_dict(),
       # 'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    utils_saveModel(dir_path, name, checkpoint)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
 
   def load_model(self, dir_path, name):
-    checkpoint = utils_loadModel(dir_path, name, self.device)
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.policy_net.load_state_dict(checkpoint['policy_net_state'])
     # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-
-  @utils_timer
-  def run(self, episodes=None):
-    self.history = train_on_policy(self.env, self, episodes)
+    print(f"Model loaded from {path}")
 
 #---------------------- Actor-Critic -------------------------
 #                        2026/1/14
@@ -766,36 +686,45 @@ class AC(RL_Model):
   '''
     Actor-Critic
   '''
-  def __init__(self, env:ENV_INFO, state_dim, hidden_dim, action_dim, 
-               actor_lr, critic_lr, gamma, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
+    '''
+      params:
+        state_dim, action_dim - 状态空间、动作空间维度
+        lr, gamma - learning rate, gamma
+        device - device
+    '''
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
-    self.actor = PolicyNet(state_dim, hidden_dim, action_dim).to(device)
-    self.critic = ValueNet(state_dim, hidden_dim).to(device)
-    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+    
+    self.actor = PolicyNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.critic = ValueNet(state_dim, self.hidden_dim).to(device)
+    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
     
     self.name = 'Actor-Critic'
+    self.is_on_policy = True
+    
     self.history = []
 
   def take_action(self, state):
-    state = torch.tensor(np.array([state]), dtype=torch.float).to(self.device)
+    state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
     probs = self.actor(state)
     action_dist = torch.distributions.Categorical(probs)
     action = action_dist.sample()
     return action.item()
   
-  def update(self, transition):
-    states = torch.tensor(np.array(transition['states']), dtype=torch.float).to(self.device)
-    actions = torch.tensor(np.array(transition['actions'])).view(-1, 1).to(self.device)
-    rewards = torch.tensor(np.array(transition['rewards']), dtype=torch.float).view(-1, 1).to(self.device)
-    next_states = torch.tensor(np.array(transition['next_states']), dtype=torch.float).to(self.device)
-    dones = torch.tensor(np.array(transition['dones']), dtype=torch.float).view(-1, 1).to(self.device)
+  def update(self, transition_dict:SampleBatch):
+    states = torch.FloatTensor(np.array(transition_dict['states'])).to(self.device)
+    actions = torch.LongTensor(np.array(transition_dict['actions'])).view(-1, 1).to(self.device)
+    rewards = torch.FloatTensor(np.array(transition_dict['rewards'])).view(-1, 1).to(self.device)
+    next_states = torch.FloatTensor(np.array(transition_dict['next_states'])).to(self.device)
+    dones = torch.FloatTensor(np.array(transition_dict['dones'])).view(-1, 1).to(self.device)
 
-    td_target = rewards+self.gamma*self.critic(next_states)*(1-dones)
-    td_delta = td_target-self.critic(states)  # A(st, at) = r+gamma*V(st+1)-V(st)
+    td_target = rewards + self.gamma * self.critic(next_states) * (1 - dones)
+    td_delta = td_target - self.critic(states)  # A(st, at) = r+gamma*V(st+1)-V(st)
     log_probs = torch.log(self.actor(states).gather(1, actions))
-    actor_loss = torch.mean(-log_probs*td_delta.detach()) # 策略梯度定理
+    actor_loss = torch.mean(-log_probs * td_delta.detach()) # 策略梯度定理
     critic_loss = torch.mean(F.mse_loss(self.critic(states), td_target.detach()))
 
     self.actor_optimizer.zero_grad()
@@ -805,50 +734,26 @@ class AC(RL_Model):
     self.actor_optimizer.step()
     self.critic_optimizer.step()
 
-  def show_history(self, save_dir=None, name=None):
-    path = save_dir+name if save_dir and name else None
-    utils_showHistory(self.history, self.name+' on '+self.env.name, 
-                      'Episodes', 'Returns', path)
-
-  def render(self, times:int=1):
-    '''
-      渲染 times 趟动画
-    '''
-    self.env.eval()
-    pbar = tqdm(iterable=range(times), desc='test')
-    for T in pbar:
-      done = False
-      state, _ = self.env.reset()
-      self.env.render()
-      time.sleep(0.02)
-      while not done:
-        action = self.take_action(state)
-        state, _, done, _ = self.env.step(action)
-        self.env.render()
-        time.sleep(1/60)
-
   def save_model(self, dir_path, name):
+    path = dir_path+name
     checkpoint = {
       'actor_state': self.actor.state_dict(),
       'critic_state': self.critic.state_dict()
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    utils_saveModel(dir_path, name, checkpoint)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
 
   def load_model(self, dir_path, name):
-    checkpoint = utils_loadModel(dir_path, name, self.device)
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.actor.load_state_dict(checkpoint['actor_state'])
     self.critic.load_state_dict(checkpoint['critic_state'])
     # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-
-  @utils_timer
-  def run(self, episodes=None):
-    '''
-      params:
-        episodes - 
-          int时，固定训练 episodes 轮数，不使用 diff_tol quit_cnt 参数
-    '''
-    self.history = train_on_policy(self.env, self, episodes)
+    print(f"Model loaded from {path}")
 
 #----------------------    TRPO    -------------------------
 #                        2026/1/18
@@ -860,25 +765,34 @@ class AC(RL_Model):
 #                        2026/1/28
 
 class DDPG(RL_Model):
-  def __init__(self, state_dim, hidden_dim, action_dim,
-               action_bound, sigma, actor_lr, critic_lr,
-               tau, gamma, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
+    '''
+      params:
+        state_dim, action_dim - 状态空间、动作空间维度
+        lr, gamma - learning rate, gamma
+        device - device
+    '''
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
 
-    self.actor = DDPG_PolicyNet(state_dim, hidden_dim, action_dim, action_bound).to(device)
-    self.critic = DDPG_QValueNet(state_dim, hidden_dim, action_dim).to(device)
-    self.target_actor = DDPG_PolicyNet(state_dim, hidden_dim, action_dim, action_bound).to(device)
-    self.target_critic = DDPG_QValueNet(state_dim, hidden_dim, action_dim).to(device)
+    self.actor = DDPG_PolicyNet(state_dim, self.hidden_dim, action_dim, self.action_bound).to(device)
+    self.critic = DDPG_QValueNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.target_actor = DDPG_PolicyNet(state_dim, self.hidden_dim, action_dim, self.action_bound).to(device)
+    self.target_critic = DDPG_QValueNet(state_dim, self.hidden_dim, action_dim).to(device)
     self.target_critic.load_state_dict(self.critic.state_dict())
     self.target_actor.load_state_dict(self.actor.state_dict())
-    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+    self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+    self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
 
     self.name = 'DDPG'
+    self.is_on_policy = False
+
+    self.replay_buffer = utils_ReplayBuffer(1000)
+    self.history = []
 
   def take_action(self, state):
-    state = torch.tensor(np.array(state), dtype=torch.float).to(self.device)
+    state = torch.from_numpy(state).float().to(self.device)
     action = self.actor(state).item()
     action += self.sigma*np.random.randn(self.action_dim) # 引入噪音
     return action
@@ -890,9 +804,9 @@ class DDPG(RL_Model):
     for param_target, param in zip(target_net.parameters(), net.parameters()):
       param_target.data.copy_(param_target.data*(1.0-self.tau)+param.data*self.tau)
 
-  def update(self, transition_dict):
+  def update(self, transition_dict:SampleBatch):
     states = torch.as_tensor(transition_dict['states'], dtype=torch.float32, device=self.device)
-    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.long, device=self.device).view(-1, 1)
+    actions = torch.as_tensor(transition_dict['actions'], dtype=torch.float32, device=self.device).view(-1, 1)  # 注意：DDPG中动作通常是float类型
     next_states = torch.as_tensor(transition_dict['next_states'], dtype=torch.float32, device=self.device)
     rewards = torch.as_tensor(transition_dict['rewards'], dtype=torch.float32, device=self.device).view(-1, 1)
     dones = torch.as_tensor(transition_dict['dones'], dtype=torch.float32, device=self.device).view(-1, 1)
@@ -912,65 +826,27 @@ class DDPG(RL_Model):
     self.soft_update(self.actor, self.target_actor)
     self.soft_update(self.critic, self.target_critic)
 
-  # def show_history(self, save_dir=None, name=None):
-  #   path = save_dir+name if save_dir and name else None
-  #   utils_showHistory([self.history], self.name, self.name+' on '+self.env.name, 
-  #                     'Episodes', 'Returns', path)
-
-  # def render(self, times:int=1):
-  #   '''
-  #     渲染 times 趟动画
-  #   '''
-  #   self.env.eval()
-  #   pbar = tqdm(iterable=range(times), desc='test')
-  #   for T in pbar:
-  #     done = False
-  #     state, _ = self.env.reset()
-  #     self.env.render()
-  #     time.sleep(0.02)
-  #     while not done:
-  #       action = self.take_action(state)
-  #       state, _, done, _ = self.env.step(action)
-  #       self.env.render()
-  #       time.sleep(1/60)
-
   def save_model(self, dir_path, name):
+    path = dir_path+name
     checkpoint = {
       'actor_state': self.target_actor.state_dict(),
       'critic_state': self.target_critic.state_dict()
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    utils_saveModel(dir_path, name, checkpoint)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
 
   def load_model(self, dir_path, name):
-    checkpoint = utils_loadModel(dir_path, name, self.device)
+    path = dir_path+name
+    if not os.path.exists(path):
+      raise FileNotFoundError(f"Model file not found: {path}")
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.actor.load_state_dict(checkpoint['actor_state'])
     self.target_actor.load_state_dict(checkpoint['actor_state'])
     self.critic.load_state_dict(checkpoint['critic_state'])
     self.target_critic.load_state_dict(checkpoint['critic_state'])
-    # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-
-  # @utils_timer
-  # def run(self, buffer:utils_ReplayBuffer, minimal_size, batch_size, n_train, episodes):
-  #   self.history = []
-  #   with tqdm(total=episodes, desc='Iteration') as pbar:
-  #     for episode in range(episodes):
-  #       total_reward = 0
-  #       state, _ = self.env.reset()
-  #       traj = Trajectory(state)
-  #       done = False
-  #       while not done:
-  #         action = self.take_action(state)
-  #         state, reward, done, _ = self.env.step(action)
-  #         total_reward += reward
-  #         traj.store_step(state, action, reward, done)
-  #       buffer.add_trajectory(traj)
-  #       self.history.append(total_reward)
-  #       if len(buffer) >= minimal_size:
-  #         for _ in range(n_train):
-  #           transition_dict = buffer.sample(batch_size)
-  #           self.update(transition_dict)
-  #       pbar.update(1)
+    print(f"Model loaded from {path}")
 
 #---------------------- Soft Actor-Critic -------------------------
 #                        2026/1/15

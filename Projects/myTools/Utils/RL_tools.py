@@ -52,6 +52,7 @@ class Trainer(RL_TrainerConfig):
         self.env.render()
         time.sleep(1/60)
 
+  @utils_timer
   def train(self):
     """
       通用训练方法，适用于不同类型的RL算法
@@ -65,6 +66,7 @@ class Trainer(RL_TrainerConfig):
     else:
       raise ValueError('RL algorithm must be off-policy or on-policy.')
 
+  @utils_timer
   def eval(self, episodes=10):
     """
       评估模型性能

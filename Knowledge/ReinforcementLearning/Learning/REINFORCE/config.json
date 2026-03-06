@@ -1,0 +1,14 @@
+{
+  "model":{
+    "hidden_dim": 256,
+    "lr": 2e-3,
+    "gamma": 0.98
+  },
+
+  "trainer":{
+    "train_episodes": 300,
+    "render_times": 3,
+    "min_size": 100,
+    "batch_size": 64
+  }
+}
