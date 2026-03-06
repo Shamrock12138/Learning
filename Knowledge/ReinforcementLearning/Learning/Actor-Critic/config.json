@@ -1,0 +1,13 @@
+{
+  "model":{
+    "hidden_dim": 128,
+    "actor_lr": 1e-3,
+    "critic_lr": 1e-2,
+    "gamma": 0.98
+  },
+
+  "trainer":{
+    "train_episodes": 1000,
+    "render_times": 3
+  }
+}

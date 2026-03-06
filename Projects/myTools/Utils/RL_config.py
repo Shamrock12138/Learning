@@ -5,6 +5,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
+from myTools.Utils.config import *
+
 class ENV_INFO(ABC):
   '''
     为各类 RL 环境提供统一的外部调用接口。
@@ -63,27 +65,23 @@ class RL_Model(ABC):
     为各类 RL 算法提供统一的外部调用接口。
 
     该类本身不实现具体算法逻辑，而是定义标准接口协议：
-      - 子类必须实现 `run` 方法，作为模型的核心执行入口
+      - 子类必须实现 `take_action` 方法，作为模型的外部接口
+      - 子类推荐实现 `train` 方法，作为模型的训练方法，同时方便其他算法调用
       - 子类建议实现 show_history 方法，作为训练过程的展示
       - 子类建议实现 render 方法，作为测试过程的展示
       - 子类建议实现 save_model, load_model 方法，作为保存加载模型
   '''
   def __init__(self):
     super().__init__()
+    self.name = None
+    self.is_on_policy = None
 
-  def __call__(self, *input, **kwds):
-    return self.run(*input, **kwds)
-  
-  def show_history(self, history):
-    '''
-      绘制 history 的变化表
-    '''
+  @abstractmethod
+  def take_action(self, state):
     pass
 
-  def render(self):
-    '''
-      渲染一趟的动画
-    '''
+  @abstractmethod
+  def update(self, trajectory:Trajectory):
     pass
   
   def save_model(self, dir_path:str, name:str):
@@ -95,13 +93,6 @@ class RL_Model(ABC):
   def load_model(self, dir_path:str, name:str):
     '''
       加载 dir_path/name 路径中的模型
-    '''
-    pass
-
-  @abstractmethod
-  def run(self, *input, **kwds):
-    '''
-      模型程序入口
     '''
     pass
 
@@ -136,18 +127,45 @@ class MDP:
     if not self.done:
       raise ValueError("Done matrix done must be provided explicitly.")
 
-if __name__ == '__main__':
-  pass
-  # env = ENV_INFO()
-  # env._states_num
-  # mdp = MDP(
-  #   info=ENV_INFO(),
-  # )
-  # mdp.P = [[[1,0,0], [0,1,0]], [[0,1,0], [0,0,1]], [[0,0,1], [0,0,1]]]
-  # States=[0,1,2],
-  #   Actions=[0,1],
-  #   P=[[[1,0,0], [0,1,0]], [[0,1,0], [0,0,1]], [[0,0,1], [0,0,1]]],  # 必须传
-  #   R=[[0,0], [0,0], [1,1]]
+class RL_TrainerConfig(ABC):
+  '''
+    RL训练器
+  '''
+  def __init__(self, rl:RL_Model, env:ENV_INFO) -> None:
+    '''
+      params:
+        rl - RL算法
+        env - 环境
+    '''
+    super().__init__()
+    self.rl = rl
+    self.env = env
+
+  def show_history(self):
+    '''
+      展示训练过程的记录
+    '''
+    pass
+
+  def render(self):
+    '''
+      展示测试过程的记录
+    '''
+    pass
+
+  @abstractmethod
+  def train(self):
+    '''
+      开始训练
+    '''
+    pass
+
+  @abstractmethod
+  def eval(self):
+    '''
+      开始测试
+    '''
+    pass
 
 #         ,--.                                                 ,--.     
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
