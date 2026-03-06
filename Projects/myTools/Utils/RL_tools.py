@@ -8,17 +8,78 @@ from torch.distributions import Normal
 from tqdm import tqdm
 
 from myTools.Utils.config import *
+from myTools.Utils.tools import *
+from myTools.Utils.config import *
 from myTools.Utils.RL_config import *
 
 #---------------------- RL Trainer -------------------------
 #                       2026/2/22
 
 class Trainer(RL_TrainerConfig):
-  def __init__(self) -> None:
-    super().__init__()
+  def __init__(self, rl:RL_Model, env:ENV_INFO, config:dict) -> None:
+    super().__init__(rl, env)
+    utils_setAttr(self, config)
+    self.train_history = {
+      'episode_rewards': [],
+    }
+    self.eval_history = {
+      'episode_rewards': [],
+    }
+    self.is_train = False
+
+  def show_history(self, save_path=None):
+    if self.is_train:
+      utils_showHistory(self.train_history, list(self.train_history.keys()), f'{self.rl.name} on {self.env.name}, train', 
+                        'episodes', '...', save_path)
+    else:
+      utils_showHistory(self.eval_history, list(self.eval_history.keys()), f'{self.rl.name} on {self.env.name}, eval', 
+                        'episodes', '...', save_path)
+      
+  def render(self):
+    '''
+      渲染 times 趟动画
+    '''
+    self.env.eval()
+    pbar = tqdm(iterable=range(self.render_times), desc='test')
+    for T in pbar:
+      done = False
+      state, _ = self.env.reset()
+      self.env.render()
+      time.sleep(0.02)
+      while not done:
+        action = self.rl.take_action(state)
+        state, _, done, _ = self.env.step(action)
+        self.env.render()
+        time.sleep(1/60)
 
   def train(self):
-    pass
+    """
+      通用训练方法，适用于不同类型的RL算法
+    """
+    self.is_train = True
+    if self.rl.is_on_policy == False and hasattr(self.rl, 'replay_buffer'):
+      self.train_history['episode_rewards'] = train_off_policy(self.env, self.rl, self.train_episodes, 
+                                                               self.rl.replay_buffer, self.min_size, self.batch_size)
+    elif self.rl.is_on_policy == True:
+      self.train_history['episode_rewards'] = train_on_policy(self.env, self.rl, self.train_episodes)
+    else:
+      raise ValueError('RL algorithm must be off-policy or on-policy.')
+
+  def eval(self, episodes=10):
+    """
+      评估模型性能
+    """
+    self.is_train = False
+    self.env.eval()
+    for episode in range(episodes):
+      state, _ = self.env.reset()
+      done = False
+      episode_reward = 0
+      while not done:
+        action = self.rl.take_action(state)
+        state, reward, done, _ = self.env.step(action)
+        episode_reward += reward
+      self.eval_history['episode_rewards'].append(episode_reward)
 
 #---------------------- 获取 action 的方法 -------------------------
 #                         2025/12/4
@@ -148,7 +209,7 @@ class PolicyNetContinuous(torch.nn.Module):
 #---------------------- 探索方式 -------------------------
 #                      2025/11/29
 
-def train_off_policy(env:ENV_INFO, agent, num_episodes:int, replay_buffer, 
+def train_off_policy(env:ENV_INFO, agent:RL_Model, num_episodes:int, replay_buffer:utils_ReplayBuffer, 
                      min_size, batch_size):
   '''
     可以 take action 的同时 update
@@ -162,18 +223,18 @@ def train_off_policy(env:ENV_INFO, agent, num_episodes:int, replay_buffer,
       while not done:
         action = agent.take_action(state)
         next_state, reward, done, _ = env.step(action)
-        replay_buffer.add(state, action, reward, next_state, done)
+        replay_buffer.add_sample(Sample(state, action, reward, next_state, done))
         state = next_state
         episode_return += reward
-        if replay_buffer.size() > min_size:
-          transition_dict = replay_buffer.sample(batch_size)[0]
+        if len(replay_buffer) > min_size:
+          transition_dict = replay_buffer.sample_sample(batch_size)
           # transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d}
           agent.update(transition_dict)
       rewards_list.append(episode_return)
       pbar.update(1)
   return rewards_list
 
-def train_on_policy(env:ENV_INFO, agent, num_episodes:int):
+def train_on_policy(env:ENV_INFO, agent:RL_Model, num_episodes:int):
   '''
     只能 take action 完成后，进行update
   '''
@@ -203,4 +264,4 @@ def train_on_policy(env:ENV_INFO, agent, num_episodes:int):
 #  ,---.  |  ,---.   ,--,--. ,--,--,--. ,--.--.  ,---.   ,---. |  |,-.  
 # (  .-'  |  .-.  | ' ,-.  | |        | |  .--' | .-. | | .--' |     /  
 # .-'  `) |  | |  | \ '-'  | |  |  |  | |  |    ' '-' ' \ `--. |  \  \  
-# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--' 
+# `----'  `--' `--'  `--`--' `--`--`--' `--'     `---'   `---' `--'`--'

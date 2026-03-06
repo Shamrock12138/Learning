@@ -398,24 +398,25 @@ class Dyna_Q(RL_Model):
 #                        2025/12/8
 
 class DQN(RL_Model):
-  def __init__(self, state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
-               target_update, device):
+  def __init__(self, state_dim, action_dim, device, config:dict):
     '''
       params:
-        state_dim, hidden_dim, action_dim - 维度
+        state_dim, action_dim - 状态空间、动作空间维度
         lr, gamma - learning rate, gamma
         epsilon - epsilon-greedy
         target_update - 目标网络更新频率
         device - device
     '''
     super().__init__()
+    utils_setAttr(self, config)
     utils_autoAssign(self)
 
-    self.q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
-    self.target_q_net = QNet(state_dim, hidden_dim, action_dim).to(device)
-    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=lr)
+    self.q_net = QNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.target_q_net = QNet(state_dim, self.hidden_dim, action_dim).to(device)
+    self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=self.lr)
     self.replay_buffer = utils_ReplayBuffer(1000)
     self.name = 'DQN'
+    self.is_on_policy = False
 
     self.counter = 0
     self.history = []
@@ -444,28 +445,6 @@ class DQN(RL_Model):
       self.target_q_net.load_state_dict(self.q_net.state_dict())
     self.counter += 1
 
-  # def show_history(self, save_dir=None, name=None):
-  #   path = save_dir+name if save_dir and name else None
-  #   utils_showHistory(self.history, 'DQN on {}'.format(self.env.name), 
-  #                     'Episodes', 'Returns', path)
-
-  # def render(self, times:int=1):
-  #   '''
-  #     渲染 times 趟动画
-  #   '''
-  #   self.env.eval()
-  #   pbar = tqdm(iterable=range(times), desc='test')
-  #   for T in pbar:
-  #     done = False
-  #     state, _ = self.env.reset()
-  #     self.env.render()
-  #     time.sleep(0.02)
-  #     while not done:
-  #       action = self.take_action(state)
-  #       state, _, done, _ = self.env.step(action)
-  #       self.env.render()
-  #       time.sleep(1/60)
-
   def save_model(self, dir_path, name):
     path = dir_path+name
     checkpoint = {
@@ -481,30 +460,10 @@ class DQN(RL_Model):
     path = dir_path+name
     if not os.path.exists(path):
       raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device)
+    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
     print(f"Model loaded from {path}")
-
-  # @utils_timer
-  # def train(self, episodes=None):
-  #   # returns_list = []
-  #   if episodes is not None:
-  #     pbar = tqdm(iterable=range(episodes), desc='DQN Iterable')
-  #     for _ in pbar:
-  #       state, _ = self.env.reset()
-  #       done = False
-  #       episode = 0
-  #       while not done:
-  #         action = self.take_action(state)
-  #         n_state, reward, done, _ = self.env.step(action)
-  #         self.replay_buffer.add(state, action, reward, n_state, done)
-  #         episode += reward
-  #         if self.replay_buffer.size() > 100:
-  #           transition_dict, _, _, _, _, _ = self.replay_buffer.sample(64)
-  #           self.update(transition_dict)
-  #         state = n_state
-  #       self.history.append(episode)
 
 #---------------------- Double DQN -------------------------
 #                        2025/12/25

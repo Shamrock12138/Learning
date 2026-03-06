@@ -74,9 +74,7 @@ class RL_Model(ABC):
   def __init__(self):
     super().__init__()
     self.name = None
-
-  def __call__(self, *input, **kwds):
-    return self.train(*input, **kwds)
+    self.is_on_policy = None
 
   @abstractmethod
   def take_action(self, state):
@@ -84,18 +82,6 @@ class RL_Model(ABC):
 
   @abstractmethod
   def update(self, trajectory:Trajectory):
-    pass
-  
-  def show_history(self, history):
-    '''
-      绘制 history 的变化表
-    '''
-    pass
-
-  def render(self):
-    '''
-      渲染一趟的动画
-    '''
     pass
   
   def save_model(self, dir_path:str, name:str):
@@ -107,12 +93,6 @@ class RL_Model(ABC):
   def load_model(self, dir_path:str, name:str):
     '''
       加载 dir_path/name 路径中的模型
-    '''
-    pass
-
-  def train(self, *input, **kwds):
-    '''
-      模型程序入口
     '''
     pass
 
@@ -151,12 +131,25 @@ class RL_TrainerConfig(ABC):
   '''
     RL训练器
   '''
-  def __init__(self, rl:RL_Model) -> None:
+  def __init__(self, rl:RL_Model, env:ENV_INFO) -> None:
+    '''
+      params:
+        rl - RL算法
+        env - 环境
+    '''
     super().__init__()
+    self.rl = rl
+    self.env = env
 
   def show_history(self):
     '''
       展示训练过程的记录
+    '''
+    pass
+
+  def render(self):
+    '''
+      展示测试过程的记录
     '''
     pass
 
