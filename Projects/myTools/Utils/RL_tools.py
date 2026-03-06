@@ -28,6 +28,9 @@ class Trainer(RL_TrainerConfig):
     self.is_train = False
 
   def show_history(self, save_path=None):
+    '''
+      展示训练历史，并保存到 save_path
+    '''
     if self.is_train:
       utils_showHistory(self.train_history, list(self.train_history.keys()), f'{self.rl.name} on {self.env.name}, train', 
                         'episodes', '...', save_path)

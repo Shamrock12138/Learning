@@ -459,24 +459,17 @@ class DQN(RL_Model):
     self.counter += 1
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'q_net_state': self.q_net.state_dict(),
       'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-    print(f"Model loaded from {path}")
 
 #---------------------- Double DQN -------------------------
 #                        2025/12/25
@@ -531,24 +524,17 @@ class DoubleDQN(RL_Model):
     self.counter += 1
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'q_net_state': self.q_net.state_dict(),
       'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-    print(f"Model loaded from {path}")
 
 #---------------------- Dueling DQN -------------------------
 #                        2026/1/11
@@ -594,24 +580,17 @@ class DuelingDQN(RL_Model):
     self.counter += 1
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'q_net_state': self.q_net.state_dict(),
       'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.q_net.load_state_dict(checkpoint['q_net_state'])
     self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-    print(f"Model loaded from {path}")
 
 #---------------------- REINFORCE -------------------------
 #                        2026/1/14
@@ -660,24 +639,17 @@ class REINFORCE(RL_Model):
     self.optimizer.step()
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'policy_net_state': self.policy_net.state_dict(),
       # 'target_q_net_state': self.target_q_net.state_dict(),
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.policy_net.load_state_dict(checkpoint['policy_net_state'])
     # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-    print(f"Model loaded from {path}")
 
 #---------------------- Actor-Critic -------------------------
 #                        2026/1/14
@@ -735,25 +707,18 @@ class AC(RL_Model):
     self.critic_optimizer.step()
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'actor_state': self.actor.state_dict(),
       'critic_state': self.critic.state_dict()
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.actor.load_state_dict(checkpoint['actor_state'])
     self.critic.load_state_dict(checkpoint['critic_state'])
     # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-    print(f"Model loaded from {path}")
 
 #----------------------    TRPO    -------------------------
 #                        2026/1/18
@@ -827,26 +792,19 @@ class DDPG(RL_Model):
     self.soft_update(self.critic, self.target_critic)
 
   def save_model(self, dir_path, name):
-    path = dir_path+name
     checkpoint = {
       'actor_state': self.target_actor.state_dict(),
       'critic_state': self.target_critic.state_dict()
       # 'optimizer_state': self.optimizer.state_dict(),
     }
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    torch.save(checkpoint, path)
-    print(f"Model saved to {path}")
+    utils_saveModel(dir_path, name, checkpoint)
 
   def load_model(self, dir_path, name):
-    path = dir_path+name
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"Model file not found: {path}")
-    checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+    checkpoint = utils_loadModel(dir_path, name, self.device)
     self.actor.load_state_dict(checkpoint['actor_state'])
     self.target_actor.load_state_dict(checkpoint['actor_state'])
     self.critic.load_state_dict(checkpoint['critic_state'])
     self.target_critic.load_state_dict(checkpoint['critic_state'])
-    print(f"Model loaded from {path}")
 
 #---------------------- Soft Actor-Critic -------------------------
 #                        2026/1/15

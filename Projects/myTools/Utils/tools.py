@@ -130,8 +130,6 @@ def utils_loadModel(dir_path, name, device):
   if not os.path.exists(path):
     raise FileNotFoundError(f"Model file not found: {path}")
   checkpoint = torch.load(path, map_location=device)
-  # self.q_net.load_state_dict(checkpoint['q_net_state'])
-  # self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
   print(f"Model loaded from {path}")
   return checkpoint
 
